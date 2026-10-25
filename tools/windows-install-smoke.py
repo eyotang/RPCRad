@@ -23,4 +23,6 @@ with tempfile.TemporaryDirectory(prefix='RPCRad setup 中文 ') as temporary:
         if uninstaller.is_file():
             subprocess.run([str(uninstaller), '/VERYSILENT', '/SUPPRESSMSGBOXES',
                             '/NORESTART'], check=True, timeout=120)
+    if (destination/'RPCRad.exe').exists():
+        raise RuntimeError('Uninstaller left the application executable behind')
     print('PASS: Windows installer, installed application, and uninstaller')
