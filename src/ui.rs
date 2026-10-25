@@ -1,3 +1,4 @@
+mod headers;
 mod history;
 mod update;
 use history::HistoryEntry;
@@ -107,7 +108,7 @@ pub struct Workbench {
     history: Vec<HistoryEntry>,
     history_detail: Option<HistoryEntry>,
     history_tab: usize,
-    history_reveal: bool,
+    history_revealed: BTreeSet<String>,
     history_editor: Entity<EditorState>,
     reply: Reply,
     busy: bool,
@@ -297,7 +298,7 @@ impl Workbench {
             history: vec![],
             history_detail: None,
             history_tab: 0,
-            history_reveal: false,
+            history_revealed: BTreeSet::new(),
             history_editor,
             reply: Reply::default(),
             busy: false,

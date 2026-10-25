@@ -48,20 +48,23 @@ impl HistoryEntry {
             self.started_ms % 1000
         )
     }
-    fn content(&self, tab: usize, reveal: bool) -> String {
+    fn sensitive_keys(&self, tab: usize) -> BTreeSet<String> {
+        let headers = match tab {
+            0 => self.dispatched_headers.as_deref().unwrap_or_default(),
+            1 => &self.original_headers,
+            _ => return BTreeSet::new(),
+        };
+        headers
+            .iter()
+            .filter(|(key, _)| super::headers::is_sensitive(key))
+            .map(|(key, _)| key.clone())
+            .collect()
+    }
+    fn content(&self, tab: usize, revealed: &BTreeSet<String>) -> String {
         let headers = |values: &Headers| {
             let values: BTreeMap<_, _> = values
                 .iter()
-                .map(|(k, v)| {
-                    (
-                        k,
-                        if reveal {
-                            v.as_str()
-                        } else {
-                            "••••••••"
-                        },
-                    )
-                })
+                .map(|(k, v)| (k, super::headers::visible_value(k, v, revealed.contains(k))))
                 .collect();
             serde_json::to_string_pretty(&values).unwrap_or_default()
         };
@@ -106,14 +109,14 @@ impl Workbench {
         if let Some(entry) = self.history.get(index) {
             self.history_detail = Some(entry.clone());
             self.history_tab = 0;
-            self.history_reveal = false;
+            self.history_revealed.clear();
             self.refresh_history(window, cx);
             cx.notify();
         }
     }
     fn refresh_history(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(entry) = &self.history_detail {
-            let content = entry.content(self.history_tab, self.history_reveal);
+            let content = entry.content(self.history_tab, &self.history_revealed);
             self.history_editor
                 .update(cx, |s, cx| s.set_value(content, window, cx));
         }
@@ -145,6 +148,33 @@ impl Workbench {
         let Some(entry) = &self.history_detail else {
             return panel;
         };
+        let reveal_buttons: Vec<_> = entry
+            .sensitive_keys(self.history_tab)
+            .into_iter()
+            .enumerate()
+            .map(|(index, key)| {
+                let label = format!(
+                    "{} {}",
+                    if self.history_revealed.contains(&key) {
+                        "隐藏"
+                    } else {
+                        "显示"
+                    },
+                    key
+                );
+                Button::new(("history-header-reveal", index))
+                    .ghost()
+                    .small()
+                    .label(label)
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        if !this.history_revealed.remove(&key) {
+                            this.history_revealed.insert(key.clone());
+                        }
+                        this.refresh_history(window, cx);
+                        cx.notify();
+                    }))
+            })
+            .collect();
         panel = panel.child(row().h(px(58.)).px_5().gap_3().border_b_1().border_color(rgb(BORDER))
             .child(Button::new("history-back").ghost().label("返回调试").on_click(cx.listener(|this,_,_,cx| {this.history_detail = None; cx.notify();})))
             .child(div().font_weight(FontWeight::SEMIBOLD).child("调用详情"))
@@ -176,17 +206,15 @@ impl Workbench {
                     }
                     tabs
                 })
-                .child(row().px_4().h(px(42.)).gap_3().border_b_1().border_color(rgb(BORDER))
+                .child(row().px_4().py_2().min_h(px(42.)).flex_wrap().gap_3().border_b_1().border_color(rgb(BORDER))
                     .child(div().text_xs().text_color(rgb(MUTED)).child(if self.history_tab <= 1 {
-                        if self.history_reveal { "显示该次调用保存的完整头部值" } else { "头部值已隐藏，点击右侧按钮核对签名" }
+                        "普通头部完整显示；敏感字段可单独展开，复制与当前显示一致"
                     } else { "本次调用的原始快照" }))
                     .child(div().flex_1())
-                    .when(self.history_tab <= 1, |s| s.child(Button::new("history-reveal").ghost().small()
-                        .label(if self.history_reveal { "隐藏头部值" } else { "显示头部值" })
-                        .on_click(cx.listener(|this,_,window,cx|{this.history_reveal = !this.history_reveal; this.refresh_history(window,cx); cx.notify();}))))
+                    .children(reveal_buttons)
                     .child(Button::new("history-copy").ghost().small().label("复制当前内容")
                         .on_click(cx.listener(|this,_,_,cx|{
-                            if let Some(entry) = &this.history_detail { cx.write_to_clipboard(ClipboardItem::new_string(entry.content(this.history_tab,this.history_reveal))); }
+                            if let Some(entry) = &this.history_detail { cx.write_to_clipboard(ClipboardItem::new_string(entry.content(this.history_tab,&this.history_revealed))); }
                         }))))
                 .child(div().flex_1().min_h_0().pt_2().child(Editor::new(&self.history_editor).readonly(true).h(relative(1.)).bordered(false).appearance(false).text_size(px(13.)))))
             .child(div().px_5().pb_3().text_xs().text_color(rgb(MUTED)).child("记录仅保存在当前会话，最多 50 条。插件 Secret 不写入调用记录。"));
@@ -198,6 +226,7 @@ impl Workbench {
 mod tests {
     use super::HistoryEntry;
     use crate::rpc::Reply;
+    use std::collections::BTreeSet;
     fn entry() -> HistoryEntry {
         HistoryEntry {
             method: "S/M".into(),
@@ -219,9 +248,13 @@ mod tests {
     fn failures_have_no_dispatched_metadata() {
         let mut entry = entry();
         entry.reply.body = "请填写 secret；密钥仅保留在当前会话".into();
-        assert!(entry.content(0, true).contains("请填写 secret"));
-        assert!(entry.content(0, true).contains("请求未交给发送进程"));
-        assert!(!entry.content(0, true).contains("private"));
+        assert!(entry.content(0, &BTreeSet::new()).contains("请填写 secret"));
+        assert!(
+            entry
+                .content(0, &BTreeSet::new())
+                .contains("请求未交给发送进程")
+        );
+        assert!(!entry.content(0, &BTreeSet::new()).contains("private"));
     }
     #[test]
     fn snapshot_keeps_final_headers_and_tracks_added_changed_removed() {
@@ -234,24 +267,35 @@ mod tests {
         let snapshot = entry.clone();
         headers[0].1 = "changed-later".into();
         entry.dispatched_headers = Some(headers);
-        assert!(snapshot.content(0, true).contains("1792930678339"));
-        assert!(snapshot.content(1, true).contains("old"));
+        assert!(
+            snapshot
+                .content(0, &BTreeSet::new())
+                .contains("1792930678339")
+        );
+        assert!(snapshot.content(1, &BTreeSet::new()).contains("old"));
         assert_eq!(snapshot.changes(), "新增 1 · 修改 1 · 移除 1");
     }
     #[test]
-    fn hidden_header_view_and_copy_do_not_expose_values() {
+    fn sensitive_headers_reveal_individually_while_signatures_stay_visible() {
         let mut entry = entry();
         entry.dispatched_headers = Some(vec![
             ("authorization".into(), "Bearer test-token".into()),
-            ("sign".into(), "test-sign".into()),
+            ("x-secret".into(), "private-secret".into()),
+            ("sign".into(), "actual-sign".into()),
+            ("ts".into(), "1792930678339".into()),
         ]);
-        for tab in [0, 1] {
-            let content = entry.content(tab, false);
-            assert!(content.contains("••••••••"));
-            for secret in ["test-token", "test-sign", "private"] {
-                assert!(!content.contains(secret));
-            }
-        }
-        assert!(entry.content(0, true).contains("Bearer test-token"));
+        let mut revealed = BTreeSet::new();
+        let content = entry.content(0, &revealed);
+        assert!(content.contains("actual-sign") && content.contains("1792930678339"));
+        assert!(!content.contains("test-token") && !content.contains("private-secret"));
+        revealed.insert("authorization".into());
+        let content = entry.content(0, &revealed);
+        assert!(content.contains("Bearer test-token"));
+        assert!(!content.contains("private-secret"));
+        assert_eq!(
+            entry.sensitive_keys(0),
+            BTreeSet::from(["authorization".into(), "x-secret".into()])
+        );
+        assert!(entry.content(1, &revealed).contains("private"));
     }
 }

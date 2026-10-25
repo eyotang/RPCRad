@@ -12,7 +12,7 @@ pub(super) struct PluginUi {
     preview: Option<Result<plugin::Headers, String>>,
     preview_receiver: Option<Receiver<Result<plugin::Headers, String>>>,
     preview_cancel: Arc<AtomicBool>,
-    reveal: bool,
+    revealed: BTreeSet<String>,
     catalog_receiver: Option<Receiver<(Vec<Plugin>, Vec<String>)>>,
 }
 impl PluginUi {
@@ -37,7 +37,7 @@ impl PluginUi {
             preview: None,
             preview_receiver: None,
             preview_cancel: Arc::new(AtomicBool::new(false)),
-            reveal: false,
+            revealed: BTreeSet::new(),
             catalog_receiver: None,
         };
         if state.settings.selected.is_empty() {
@@ -82,7 +82,7 @@ impl PluginUi {
         self.preview_cancel.store(true, Ordering::Relaxed);
         self.preview_receiver = None;
         self.preview = None;
-        self.reveal = false;
+        self.revealed.clear();
     }
     fn load_fields(&mut self, window: &mut Window, cx: &mut Context<Workbench>) {
         self.fields.clear();
@@ -171,7 +171,7 @@ impl PluginUi {
     }
     pub(super) fn received(&mut self, headers: plugin::Headers) {
         self.preview = Some(Ok(headers));
-        self.reveal = false;
+        self.revealed.clear();
     }
 }
 impl Drop for PluginUi {
@@ -359,9 +359,11 @@ impl Workbench {
                         .gap_3()
                         .child(div().w(px(125.)).flex_shrink_0().child("Secret"))
                         .child(
-                            div()
-                                .flex_1()
-                                .child(Input::new(&self.plugins.secret).disabled(self.busy)),
+                            div().flex_1().child(
+                                Input::new(&self.plugins.secret)
+                                    .mask_toggle()
+                                    .disabled(self.busy),
+                            ),
                         ),
                 )
                 .child(div().text_xs().text_color(rgb(MUTED)).child(format!(
@@ -442,33 +444,32 @@ impl Workbench {
         if let Some(result) = &self.plugins.preview {
             match result {
                 Ok(headers) => {
-                    panel = panel.child(
-                        row().justify_between().child("最近生成的请求头").child(
-                            Button::new("reveal-plugin")
-                                .ghost()
-                                .small()
-                                .label(if self.plugins.reveal {
-                                    "隐藏值"
-                                } else {
-                                    "显示值"
-                                })
-                                .on_click(cx.listener(|this, _, _, cx| {
-                                    this.plugins.reveal = !this.plugins.reveal;
-                                    cx.notify();
-                                })),
-                        ),
-                    );
-                    for (key, value) in headers {
-                        panel = panel.child(
-                            column()
-                                .gap_1()
-                                .child(div().text_xs().text_color(rgb(MUTED)).child(key.clone()))
-                                .child(div().text_sm().child(if self.plugins.reveal {
-                                    value.clone()
-                                } else {
-                                    "••••••••".into()
-                                })),
-                        );
+                    panel = panel.child("最近生成的请求头");
+                    for (index, (key, value)) in headers.iter().enumerate() {
+                        let revealed = self.plugins.revealed.contains(key);
+                        let mut label = row()
+                            .gap_2()
+                            .child(div().text_xs().text_color(rgb(MUTED)).child(key.clone()));
+                        if super::headers::is_sensitive(key) {
+                            let key = key.clone();
+                            label = label.child(
+                                Button::new(("preview-header-reveal", index))
+                                    .ghost()
+                                    .small()
+                                    .label(if revealed { "隐藏" } else { "显示" })
+                                    .on_click(cx.listener(move |this, _, _, cx| {
+                                        if !this.plugins.revealed.remove(&key) {
+                                            this.plugins.revealed.insert(key.clone());
+                                        }
+                                        cx.notify();
+                                    })),
+                            );
+                        }
+                        panel = panel.child(column().gap_1().child(label).child(
+                            div().text_sm().child(
+                                super::headers::visible_value(key, value, revealed).to_string(),
+                            ),
+                        ));
                     }
                 }
                 Err(error) => {
