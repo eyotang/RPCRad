@@ -129,7 +129,7 @@ WizardStyle=modern
 [Files]
 Source: "{bundle}\\*"; DestDir: "{{app}}"; Flags: ignoreversion recursesubdirs createallsubdirs
 [Icons]
-Name: "{{group}}\\RPCRad"; Filename: "{{app}}\\RPCRad.exe"
+Name: "{{group}}\\RPCRad"; Filename: "{{app}}\\RPCRad.exe"; AppUserModelID: "dev.rpcrad.desktop"
 [Run]
 Filename: "{{app}}\\RPCRad.exe"; Description: "Launch RPCRad"; Flags: nowait postinstall skipifsilent
 ''',encoding='utf-8-sig')
