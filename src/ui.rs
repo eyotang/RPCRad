@@ -1963,7 +1963,7 @@ pub fn plugin_smoke_test() -> anyhow::Result<()> {
         .into_iter()
         .find(|m| m.name == "GetUser")
         .ok_or_else(|| anyhow::anyhow!("GetUser missing"))?;
-    let (plugins, errors) = plugin::catalog();
+    let (plugins, errors) = plugin::builtin_catalog();
     anyhow::ensure!(errors.is_empty(), "{errors:?}");
     let plugin = plugins
         .into_iter()

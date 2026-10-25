@@ -59,9 +59,6 @@ pub struct Execution {
     pub secret: Zeroizing<String>,
 }
 
-pub fn directory() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("plugins")
-}
 fn read_bounded(path: &Path) -> Result<String> {
     let mut text = String::new();
     std::fs::File::open(path)?
@@ -96,9 +93,6 @@ pub fn builtin_catalog() -> (Vec<Plugin>, Vec<String>) {
         }
     }
     (plugins, errors)
-}
-pub fn catalog() -> (Vec<Plugin>, Vec<String>) {
-    catalog_from(&directory())
 }
 pub fn catalog_from(root: &Path) -> (Vec<Plugin>, Vec<String>) {
     let mut plugins = Vec::new();
@@ -313,7 +307,7 @@ impl Execution {
 mod tests {
     use super::*;
     fn execution(id: &str) -> Execution {
-        let (plugins, errors) = catalog();
+        let (plugins, errors) = builtin_catalog();
         assert!(errors.is_empty(), "{errors:?}");
         let plugin = plugins.into_iter().find(|p| p.manifest.id == id).unwrap();
         let mut config = plugin.defaults();
