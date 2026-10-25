@@ -1,4 +1,4 @@
-//! Metra's macOS update contract: GitHub latest.json discovery and explicit release-page download.
+//! Metra-style update contract: GitHub latest.json discovery and explicit release-page download.
 use anyhow::{Context, Result, ensure};
 use serde::Deserialize;
 use std::{io::Read, time::Duration};

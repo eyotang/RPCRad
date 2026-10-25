@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Exercise packaged gRPC/signing and optionally two actual native UI frames."""
 import argparse
-import json
 import os
 from pathlib import Path
 import shutil
@@ -19,7 +18,7 @@ def run(app, gui, data):
     # An existing file prevents tests from importing the developer's legacy workspace.
     (data/'workspace.json').write_text('{}')
     for arg in ['--smoke-test', '--plugin-smoke-test']:
-        result = subprocess.run([str(app), arg], cwd=data, env=env, capture_output=True, text=True, timeout=45)
+        result = subprocess.run([str(app), arg], cwd=data, env=env, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=45)
         print(result.stdout, end='')
         if result.returncode:
             raise RuntimeError(f'{arg}: {result.returncode}\n{result.stderr}')
@@ -28,7 +27,7 @@ def run(app, gui, data):
     if gui:
         marker = data/'rendered.txt'
         env['RPCRAD_UI_SMOKE_MARKER'] = str(marker)
-        result = subprocess.run([str(app), '--ui-smoke-test'], cwd=data, env=env, capture_output=True, text=True, timeout=40)
+        result = subprocess.run([str(app), '--ui-smoke-test'], cwd=data, env=env, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=40)
         if result.returncode or not marker.exists():
             raise RuntimeError(f'Native UI failed: {result.returncode}\n{result.stdout}\n{result.stderr}')
         print('PASS: native UI rendered two frames')
@@ -45,7 +44,7 @@ def main():
             if s.connect_ex(('127.0.0.1', port)) == 0:
                 raise RuntimeError(f'Test port {port} is already in use; nothing was stopped')
     processes = []
-    with tempfile.TemporaryDirectory(prefix='rpcrad smoke ') as temporary:
+    with tempfile.TemporaryDirectory(prefix='rpcrad smoke 中文 ') as temporary:
         data = Path(temporary)
         try:
             fixture = ROOT/'tools/bin'/('rpcrad-demo.exe' if os.name == 'nt' else 'rpcrad-demo')

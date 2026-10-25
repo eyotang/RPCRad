@@ -19,7 +19,7 @@
 
 Secret 和调用历史仅保存在当前会话，重启后需要重新填写 Secret。macOS 包暂未 Developer ID 签名及公证，Windows 安装器暂未 Authenticode 签名。
 
-## 源码本地示例
+## macOS 源码本地示例
 
 打开 `dist/RPCRad.app`。本次预览的本地示例服务位于 `localhost:50051`。
 
@@ -47,7 +47,7 @@ tools/bin/rpcrad-demo
 - 响应正文、Headers、Trailers、复制、会话调用历史与请求重载。
 - 左侧历史和底部调用记录旁的垃圾桶图标可一键清空记录，不打断正在进行的请求。
 - 点击底部调用记录或左侧历史，查看当次请求详情：插件处理前/最终请求头、请求体、响应和连接设置；支持显示头部值、复制及只读查看。
-- 请求草稿、服务定义、连接设置、收藏自动保存到 `~/Library/Application Support/RPCRad/workspace.json`。从原项目源码构建的新版会在首次启动时读取该项目的旧工作区；下载的发行版无法定位任意位置的旧源码目录。
+- 请求草稿、服务定义、连接设置、收藏自动保存到系统用户数据目录，具体路径见 [安装说明](docs/INSTALL.md)。从原项目源码构建的新版会在首次启动时读取该项目的旧工作区；下载的发行版无法定位任意位置的旧源码目录。
 
 认证信息与 Metadata 不落盘。调用历史（包含请求头快照）仅保存在本次会话，最多 50 条；插件 Secret 不写入记录。最终请求头来自 grpcurl 发送进程启动时使用的业务 Metadata，包含插件结果，不包含 HTTP/2 自动添加的协议头。连接失败不代表服务端已经收到这些头。插件失败或发送前取消的记录会明确标记为未发送。
 
@@ -70,9 +70,10 @@ tools/bin/rpcrad-demo
 需要 Rust stable、Go、Python 3.11+，以及对应系统的本地构建工具，见 [安装说明](docs/INSTALL.md)。
 
 ```sh
-sh tools/setup.sh
+python tools/setup.py
 cargo run --locked
-sh tools/package.sh
+# 在当前系统构建对应发布包
+python tools/release.py --tag v0.2.0
 ```
 
 首次构建通过 Cargo / Go 下载公开依赖；调试无需账号或云服务。启动时会向 GitHub 检查版本，不上传请求内容。示例服务只监听 127.0.0.1。

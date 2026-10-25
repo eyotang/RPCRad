@@ -23,7 +23,7 @@ VERSION_PATTERN = r'(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)'
 PLATFORMS = ('macos-arm64', 'macos-x64', 'windows-x64', 'linux-x64')
 
 def version(root=ROOT):
-    value = tomllib.loads((root/'Cargo.toml').read_text())['package']['version']
+    value = tomllib.loads((root/'Cargo.toml').read_text(encoding='utf-8'))['package']['version']
     if not re.fullmatch(VERSION_PATTERN, value): raise ValueError('Release version must be stable x.y.z')
     return value
 
@@ -59,7 +59,7 @@ def validate_assets(assets, value, targets=PLATFORMS):
         for name in packages(value, target):
             path = assets/name
             if path.is_symlink() or not path.is_file() or not path.stat().st_size: raise ValueError('Invalid release asset')
-            if (assets/(name+'.sha256')).read_text().strip() != f'{checksum(path)}  {name}': raise ValueError(f'SHA-256 does not match {name}')
+            if (assets/(name+'.sha256')).read_text(encoding='utf-8').strip() != f'{checksum(path)}  {name}': raise ValueError(f'SHA-256 does not match {name}')
 
 def manifest(assets, value, notes):
     validate_assets(assets, value)
@@ -176,8 +176,8 @@ def main():
     value = version(); validate_tag(args.tag,value)
     assets = ROOT/'release-assets'/args.tag; assets.mkdir(parents=True,exist_ok=True)
     if args.manifest_only:
-        notes=(ROOT/'docs/releases'/f'{args.tag}.md').read_text()
-        (assets/'latest.json').write_text(json.dumps(manifest(assets,value,notes),ensure_ascii=False,indent=2)+'\n')
+        notes=(ROOT/'docs/releases'/f'{args.tag}.md').read_text(encoding='utf-8')
+        (assets/'latest.json').write_text(json.dumps(manifest(assets,value,notes),ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
         print(f'Validated complete multi-platform release: {assets}')
         return
     target = args.platform or native_platform()

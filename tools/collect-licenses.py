@@ -31,7 +31,7 @@ for package in metadata["packages"]:
             copy_license(path, target/path.name)
         elif path.is_dir():
             shutil.copytree(path, target/path.name, dirs_exist_ok=True, copy_function=copy_license)
-(out/"rust-dependencies.json").write_text(json.dumps(notices, ensure_ascii=False, indent=2)+"\n")
+(out/"rust-dependencies.json").write_text(json.dumps(notices, ensure_ascii=False, indent=2)+"\n", encoding="utf-8")
 env = os.environ.copy()
 env["GOPATH"] = str(root/".cache/go")
 env["GOCACHE"] = str(root/".cache/go-build")
