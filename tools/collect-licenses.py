@@ -6,6 +6,12 @@ import shutil
 import subprocess
 import sys
 
+def copy_license(source, destination):
+    # Go's module cache is read-only; generated bundle files must stay replaceable.
+    destination = Path(destination)
+    destination.unlink(missing_ok=True)
+    return shutil.copyfile(source, destination)
+
 root = Path(__file__).resolve().parents[1]
 out = Path(sys.argv[1]); out.mkdir(parents=True, exist_ok=True)
 metadata = json.loads(subprocess.check_output(["cargo", "metadata", "--locked", "--format-version=1"], cwd=root))
@@ -22,9 +28,9 @@ for package in metadata["packages"]:
     for path in candidates:
         if path.is_file():
             target.mkdir(exist_ok=True)
-            shutil.copy2(path, target/path.name)
+            copy_license(path, target/path.name)
         elif path.is_dir():
-            shutil.copytree(path, target/path.name, dirs_exist_ok=True)
+            shutil.copytree(path, target/path.name, dirs_exist_ok=True, copy_function=copy_license)
 (out/"rust-dependencies.json").write_text(json.dumps(notices, ensure_ascii=False, indent=2)+"\n")
 env = os.environ.copy()
 env["GOPATH"] = str(root/".cache/go")
@@ -45,5 +51,5 @@ for line in info.splitlines():
         if path.is_file() and path.name.upper().startswith(("LICENSE", "COPYING", "NOTICE")):
             target = out/"go"/name/version
             target.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(path, target/path.name)
-shutil.copy2(root/"THIRD_PARTY_NOTICES.md",out/"THIRD_PARTY_NOTICES.md")
+            copy_license(path, target/path.name)
+copy_license(root/"THIRD_PARTY_NOTICES.md",out/"THIRD_PARTY_NOTICES.md")
