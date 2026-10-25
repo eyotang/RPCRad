@@ -1,6 +1,74 @@
 use super::*;
 use crate::updater;
 impl Workbench {
+    pub fn show_about(&mut self, check: bool, cx: &mut Context<Self>) {
+        self.about_open = true;
+        if check {
+            self.check_update(cx);
+        }
+        cx.notify();
+    }
+    pub(super) fn about_panel(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        column()
+            .size_full()
+            .bg(rgb(SURFACE))
+            .child(
+                row()
+                    .h(px(58.))
+                    .px_5()
+                    .gap_3()
+                    .border_b_1()
+                    .border_color(rgb(BORDER))
+                    .child(div().font_weight(FontWeight::SEMIBOLD).child("关于 RPCRad"))
+                    .child(div().flex_1())
+                    .child(
+                        Button::new("close-about")
+                            .ghost()
+                            .icon(IconName::X)
+                            .accessibility_label("关闭关于，返回调试")
+                            .tooltip("返回调试")
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.about_open = false;
+                                cx.notify();
+                            })),
+                    ),
+            )
+            .child(
+                column()
+                    .id("about-scroll")
+                    .flex_1()
+                    .min_h_0()
+                    .overflow_y_scroll()
+                    .p_6()
+                    .gap_5()
+                    .child(
+                        row()
+                            .gap_4()
+                            .child(img("brand/logo.png").size(px(64.)))
+                            .child(
+                                column()
+                                    .gap_2()
+                                    .child(
+                                        div()
+                                            .text_size(px(24.))
+                                            .font_weight(FontWeight::SEMIBOLD)
+                                            .child("RPCRad"),
+                                    )
+                                    .child(format!("版本 {}", env!("CARGO_PKG_VERSION")))
+                                    .child(
+                                        div().text_color(rgb(MUTED)).child("本地 gRPC 调试工具"),
+                                    ),
+                            ),
+                    )
+                    .child(self.update_panel(cx))
+                    .child(
+                        Button::new("about-repository")
+                            .ghost()
+                            .label("项目主页")
+                            .on_click(|_, _, cx| cx.open_url("https://github.com/eyotang/RPCRad")),
+                    ),
+            )
+    }
     pub(super) fn check_update(&mut self, cx: &mut Context<Self>) {
         if self.update_receiver.is_some() {
             return;

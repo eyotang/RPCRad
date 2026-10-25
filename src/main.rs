@@ -58,6 +58,12 @@ fn main() {
                 KeyBinding::new("cmd-s", ui::SaveWorkspace, None),
             ]);
             cx.on_action(|_: &ui::Quit, cx| cx.quit());
+            cx.set_menus([Menu::new("RPCRad").items([
+                MenuItem::action("关于 RPCRad…", ui::About),
+                MenuItem::action("检查更新…", ui::CheckUpdates),
+                MenuItem::separator(),
+                MenuItem::action("退出 RPCRad", ui::Quit),
+            ])]);
             let options = WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
                     None,
@@ -75,7 +81,19 @@ fn main() {
             match gpui_kit::open_window(options, cx, |window, cx| {
                 cx.new(|cx| ui::Workbench::new(window, cx))
             }) {
-                Ok(_) => cx.activate(true),
+                Ok((window, workbench)) => {
+                    let about = workbench.downgrade();
+                    cx.on_action(move |_: &ui::About, cx| {
+                        let _ = about.update(cx, |view, cx| view.show_about(false, cx));
+                        let _ = window.update(cx, |_, window, _| window.activate_window());
+                    });
+                    let updates = workbench.downgrade();
+                    cx.on_action(move |_: &ui::CheckUpdates, cx| {
+                        let _ = updates.update(cx, |view, cx| view.show_about(true, cx));
+                        let _ = window.update(cx, |_, window, _| window.activate_window());
+                    });
+                    cx.activate(true);
+                }
                 Err(error) => {
                     eprintln!("无法打开 RPCRad: {error}");
                     cx.quit();

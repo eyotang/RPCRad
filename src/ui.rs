@@ -26,7 +26,17 @@ use std::{
     time::{Duration, Instant},
 };
 
-gpui_kit::actions!(rpcrad, [Quit, Send, SearchServices, SaveWorkspace]);
+gpui_kit::actions!(
+    rpcrad,
+    [
+        Quit,
+        Send,
+        SearchServices,
+        SaveWorkspace,
+        About,
+        CheckUpdates
+    ]
+);
 const GREEN: u32 = 0x128252;
 const INK: u32 = 0x25312d;
 const MUTED: u32 = 0x7b8580;
@@ -84,6 +94,7 @@ struct Saved {
 }
 
 pub struct Workbench {
+    about_open: bool,
     plugins: PluginUi,
     methods: Vec<Method>,
     protos: Vec<PathBuf>,
@@ -293,6 +304,7 @@ impl Workbench {
             timeout: if saved.timeout == 0 { 5 } else { saved.timeout },
             request_tab: 0,
             response_tab: 0,
+            about_open: false,
             history_mode: false,
             history_open: false,
             history: vec![],
@@ -363,6 +375,7 @@ impl Workbench {
         }
         self.save(cx);
         self.history_detail = None;
+        self.about_open = false;
         self.plugins.invalidate();
         self.selected = index;
         if !self.tabs.contains(&index) {
@@ -409,7 +422,7 @@ impl Workbench {
         })
     }
     fn send(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.history_detail.is_some() {
+        if self.history_detail.is_some() || self.about_open {
             return;
         }
         if self.busy {
@@ -952,7 +965,9 @@ impl Workbench {
 impl Render for Workbench {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let sidebar = self.sidebar(cx).into_any_element();
-        let workspace = if self.history_detail.is_some() {
+        let workspace = if self.about_open {
+            self.about_panel(cx).into_any_element()
+        } else if self.history_detail.is_some() {
             self.history_panel(cx).into_any_element()
         } else {
             self.workspace(cx).into_any_element()
@@ -998,9 +1013,7 @@ impl Render for Workbench {
                                 .ghost()
                                 .label(format!("新版本 {}", release.version))
                                 .on_click(cx.listener(|this, _, _, cx| {
-                                    this.history_detail = None;
-                                    this.request_tab = 3;
-                                    cx.notify();
+                                    this.show_about(false, cx);
                                 })),
                         )
                     })
@@ -1020,6 +1033,7 @@ impl Render for Workbench {
                             .icon(IconName::Settings)
                             .tooltip("设置与更新")
                             .on_click(cx.listener(|this, _, _, cx| {
+                                this.about_open = false;
                                 this.history_detail = None;
                                 this.request_tab = 3;
                                 cx.notify();

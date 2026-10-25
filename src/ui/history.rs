@@ -129,6 +129,7 @@ impl Workbench {
         cx: &mut Context<Self>,
     ) {
         if let Some(entry) = self.history.get(index) {
+            self.about_open = false;
             self.history_detail = Some(entry.clone());
             self.history_tab = 0;
             self.history_revealed.clear();

@@ -6,7 +6,7 @@
 
 从 [GitHub Releases](https://github.com/eyotang/RPCRad/releases/latest) 下载 DMG，将 RPCRad 拖入 Applications。首版支持 macOS 14+ 的 Apple Silicon，包内含 grpcurl 和示例 Proto，无需 Rust / Go。安装包采用 ad-hoc 签名，尚未使用 Apple Developer ID 签名或公证。
 
-沿用 Metra 的 macOS 更新流程：启动时检查 `latest.json`；也可在 **设置 → 检查更新** 手动检查。发现新版本后点击下载，打开对应 GitHub Release，下载并替换应用。工作区配置保留，Secret 仍需在新会话填写。
+沿用 Metra 的 macOS 更新流程：启动时检查 `latest.json`；也可通过 macOS 顶部 **RPCRad → 检查更新…** 主动检查，结果和下载按钮会直接显示。**RPCRad → 关于 RPCRad…** 显示当前版本、项目主页和更新入口。设置页也保留检查入口。发现新版本后点击下载，打开对应 GitHub Release，下载并替换应用。工作区配置保留，Secret 仍需在新会话填写。
 
 ## 源码本地示例
 
