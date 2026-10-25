@@ -5,6 +5,11 @@ on:
     tags: ['v*']
   pull_request:
   workflow_dispatch:
+    inputs:
+      reuse_run:
+        description: 'Optional: recheck a release-tag run with successful native builds; only verification/docs changes allowed'
+        type: string
+        required: false
 permissions:
   contents: read
 concurrency:
@@ -12,6 +17,7 @@ concurrency:
   cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/v') }}
 jobs:
   build:
+    if: ${{ inputs.reuse_run == '' }}
     strategy:
       fail-fast: false
       matrix:
@@ -103,28 +109,47 @@ jobs:
     if: ${{ !cancelled() }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      tag: ${{ steps.source.outputs.tag }}
+      run_id: ${{ steps.source.outputs.run_id }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Validate native artifact source
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REUSE_RUN: ${{ inputs.reuse_run }}
+        run: python tools/release_source.py
       - uses: actions/download-artifact@v8
         with:
           name: packages-linux-x64
           path: arch-packages
+          run-id: ${{ steps.source.outputs.run_id }}
+          github-token: ${{ github.token }}
       - name: Install Arch package and verify Wayland rendering
         run: |
           docker run --rm -v "$PWD:/work" -w /work archlinux:base-devel bash -euc '
-            pacman -Syu --noconfirm --needed python go git fontconfig freetype2 libxkbcommon libxkbcommon-x11 libxcb libx11 wayland vulkan-icd-loader vulkan-swrast alsa-lib openssl zstd xdg-utils xdg-desktop-portal xdg-desktop-portal-gtk noto-fonts noto-fonts-cjk weston dbus
+            pacman -Syu --noconfirm --needed python go git fontconfig freetype2 libxkbcommon libxkbcommon-x11 libxcb libx11 wayland vulkan-icd-loader vulkan-swrast alsa-lib openssl zstd xdg-utils xdg-desktop-portal xdg-desktop-portal-gtk noto-fonts noto-fonts-cjk weston dbus xorg-server-xvfb xorg-xauth
             pacman -U --noconfirm arch-packages/*.pkg.tar.zst
             git config --global --add safe.directory /work
             python tools/setup.py
-            python tools/wayland-smoke.py
+            xvfb-run -a python tools/wayland-smoke.py
           '
   publish:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: ${{ !cancelled() && needs['arch-wayland'].result == 'success' && ((startsWith(github.ref, 'refs/tags/v') && needs.build.result == 'success') || (github.event_name == 'workflow_dispatch' && inputs.reuse_run != '')) }}
     needs: [build, arch-wayland]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: write
+      actions: read
+    env:
+      RELEASE_TAG: ${{ needs['arch-wayland'].outputs.tag }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -134,14 +159,16 @@ jobs:
         with:
           pattern: packages-*
           merge-multiple: true
-          path: release-assets/${{ github.ref_name }}
+          path: release-assets/${{ needs['arch-wayland'].outputs.tag }}
+          run-id: ${{ needs['arch-wayland'].outputs.run_id }}
+          github-token: ${{ github.token }}
       - name: Validate every platform before publishing the update manifest
-        run: python tools/release.py --tag "$GITHUB_REF_NAME" --manifest-only
+        run: python tools/release.py --tag "$RELEASE_TAG" --manifest-only
       - name: Upload complete release then publish
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="$GITHUB_REF_NAME"
+          tag="$RELEASE_TAG"
           if gh release view "$tag" >/dev/null 2>&1; then
             test "$(gh release view "$tag" --json isDraft --jq .isDraft)" = true
           else

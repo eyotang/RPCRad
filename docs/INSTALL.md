@@ -45,7 +45,7 @@ sudo pacman -U ./rpcrad-版本-1-x86_64.pkg.tar.zst
 
 随后从应用启动器打开 RPCRad。更新使用同样命令，卸载使用 `sudo pacman -R rpcrad`。该包使用与 Ubuntu 24.04 相容的 glibc 基线；在更新到当前状态的 Arch 环境中安装并进行 Wayland 渲染验证。CI 使用 Arch + Weston 无头 Wayland，不等同于在每一种 Omarchy / Hyprland 显卡组合上完成了人工测试。
 
-确保有适合显卡的 Vulkan 驱动；保留 Omarchy 自带的 portal 配置，文件选择由 `xdg-desktop-portal` 及相应后端处理。中文界面建议安装 `noto-fonts-cjk`。
+确保有适合显卡的 Vulkan 驱动；保留 Omarchy 自带的 portal 配置，文件选择由 `xdg-desktop-portal` 及相应后端处理。中文界面建议安装 `noto-fonts-cjk`。CI 用 Xvfb 给 Weston 提供虚拟键鼠输入；RPCRad 的测试进程移除 DISPLAY，仅连接 Wayland。
 
 ## Linux 便携包
 

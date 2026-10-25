@@ -13,6 +13,8 @@
 
 主分支每次通过后的构建产物保存 14 天，也可以下载这些**同一提交、全部通过验证**的产物发布；先创建对应标签，避免与自动发布任务重复写入。只有发布任务获得 contents:write，构建验证任务只读。
 
+如果标签的四个原生构建均已通过，只需要修正验证环境，可在 main 手动运行工作流，填写 `reuse_run` 为该标签的运行 ID。工作流验证仓库、标签提交、四个平台结果，并只允许验证脚本、工作流和安装/发布文档发生变化；应用、依赖、图标或打包代码有变化时必须重新构建。通过后复用原产物完成 Arch/Wayland 验证并发布，不移动已存在的标签。
+
 ## 本机构建
 
 `python tools/setup.py` 安装固定版本 grpcurl 和本地示例服务。`python tools/release.py --tag vX.Y.Z` 构建当前 OS/架构，产物在 release-assets/vX.Y.Z。Mac 的 `.app` 在 dist/release，Windows/Linux 的完整目录在 dist/平台/RPCRad。
