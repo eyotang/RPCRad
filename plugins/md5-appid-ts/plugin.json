@@ -1,0 +1,15 @@
+{
+  "api_version": 1,
+  "id": "md5-appid-ts",
+  "name": "MD5 · AppID + 时间戳",
+  "description": "MD5(secret + appid + ts + secret) · 每次发送生成当前时间，默认毫秒，32 位小写。",
+  "secret_encoding": "utf8",
+  "fields": [
+    {"key":"appid", "label":"AppID", "default":""},
+    {"key":"timestamp_unit", "label":"时间戳单位", "default":"milliseconds", "options":["milliseconds","seconds"]},
+    {"key":"signature_header", "label":"签名头名称", "default":"sign"},
+    {"key":"appid_header", "label":"AppID 头名称", "default":"appid"},
+    {"key":"timestamp_header", "label":"时间戳头名称", "default":"ts"},
+    {"key":"hex_case", "label":"MD5 字母大小写", "default":"lower", "options":["lower","upper"]}
+  ]
+}

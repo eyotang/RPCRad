@@ -1,0 +1,85 @@
+extern crate gpui_kit as gpui;
+mod assets;
+mod paths;
+mod plugin;
+mod rpc;
+mod ui;
+mod updater;
+use gpui_kit::component::{Theme, ThemeMode};
+use gpui_kit::*;
+
+fn main() {
+    if std::env::args().any(|arg| arg == "--check-update") {
+        match updater::check() {
+            Ok(Some(release)) => println!("Update available: {}", release.version),
+            Ok(None) => println!("Up to date: {}", env!("CARGO_PKG_VERSION")),
+            Err(error) => {
+                eprintln!("{error:#}");
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
+    if std::env::args().any(|arg| arg == "--plugin-smoke-test") {
+        if let Err(error) = ui::plugin_smoke_test() {
+            eprintln!("{error:#}");
+            std::process::exit(1);
+        }
+        return;
+    }
+    if std::env::args().any(|arg| arg == "--smoke-test") {
+        if let Err(error) = ui::smoke_test() {
+            eprintln!("{error:#}");
+            std::process::exit(1);
+        }
+        return;
+    }
+    gpui_kit::application()
+        .with_assets(assets::Assets)
+        .run(|cx| {
+            gpui_kit::init(cx);
+            Theme::change(ThemeMode::Light, None, cx);
+            let theme = Theme::global_mut(cx);
+            theme.colors.primary = rgb(0x128252).into();
+            theme.colors.primary_hover = rgb(0x0c7045).into();
+            theme.colors.primary_active = rgb(0x095c38).into();
+            theme.colors.ring = rgb(0x128252).into();
+            theme.tokens.button_primary = Hsla::from(rgb(0x128252)).into();
+            theme.tokens.button_primary_hover = Hsla::from(rgb(0x0c7045)).into();
+            theme.tokens.button_primary_active = Hsla::from(rgb(0x095c38)).into();
+            theme.font_size = px(13.);
+            theme.mono_font_size = px(13.);
+            theme.radius = px(6.);
+            theme.shadow = false;
+            cx.bind_keys([
+                KeyBinding::new("cmd-q", ui::Quit, None),
+                KeyBinding::new("cmd-enter", ui::Send, None),
+                KeyBinding::new("cmd-k", ui::SearchServices, None),
+                KeyBinding::new("cmd-s", ui::SaveWorkspace, None),
+            ]);
+            cx.on_action(|_: &ui::Quit, cx| cx.quit());
+            let options = WindowOptions {
+                window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
+                    None,
+                    size(px(1440.), px(900.)),
+                    cx,
+                ))),
+                titlebar: Some(TitlebarOptions {
+                    title: Some("RPCRad".into()),
+                    appears_transparent: false,
+                    ..Default::default()
+                }),
+                window_min_size: Some(size(px(1080.), px(680.))),
+                ..Default::default()
+            };
+            match gpui_kit::open_window(options, cx, |window, cx| {
+                cx.new(|cx| ui::Workbench::new(window, cx))
+            }) {
+                Ok(_) => cx.activate(true),
+                Err(error) => {
+                    eprintln!("无法打开 RPCRad: {error}");
+                    cx.quit();
+                }
+            }
+        });
+}

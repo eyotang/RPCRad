@@ -1,0 +1,32 @@
+Use case: ui-mockup
+Create ONE high fidelity desktop application UI design screenshot for "RPCRad", a local gRPC debugging tool intended for Rust GPUI + GPUI-KIT. This is an actual application interface, NOT a marketing website, NOT a moodboard. Single landscape canvas 1600x1000-ish, straight-on, sharp typography, no perspective. The application fills the canvas, thin native rounded window corners, no surrounding device or large background margins.
+Visual direction: exceptionally polished light native macOS developer tool. Quiet white and pale neutral gray surfaces, crisp hairline borders, dark graphite text, restrained emerald green accent for active methods and send action. Inspired by the practical simplicity of BloomRPC, clean workspace navigation of Kreya, and focused desktop feel of Yaak. Professional compact density with breathing room. SF Pro-like UI text, SF Mono-like JSON. 6px control corner radii, 28-34px controls, tiny consistent 1.5px stroke icons. NO purple, gradients, oversized headlines, dashboard metric cards, big shadows, decorative illustrations or website sections.
+Layout:
+1) 44px native macOS title bar: small traffic lights on far left, subtle centered title "RPCRad", right small sidebar toggle and appearance icons.
+2) 46px app toolbar: left compact green monogram and workspace selector "本地工作区" down chevron. Right environment selector with green dot "Local", command search with shortcut "⌘ K", small settings icon.
+3) Left sidebar 260px wide, very light gray, vertical separator. Top switcher "服务" selected and "历史". Search input "搜索服务或方法". Two compact actions "+ 导入 Proto" and "服务反射". Section label "PROTO 文件" with count "3". File user.proto expanded, package user.v1 in faint caption, service UserService expanded. Four indented RPC rows "GetUser" selected with muted green rounded highlight, "ListUsers", "CreateUser", "WatchUsers"; each has a tiny method/stream icon and discrete type label such as "Unary" or "Stream". Next files order.proto and health.proto collapsed. Lower sidebar section "收藏" with one saved item "获取测试用户". Bottom sidebar small folder icon with "本地保存" and subtle green check.
+4) Main workspace occupies remaining width. First a tab bar: selected "GetUser" with small green RPC icon and close icon; inactive "WatchUsers"; plus tab button.
+5) Header row method breadcrumb "user.v1.UserService / GetUser" with modest "Unary" badge. Below it endpoint bar: small protocol label "gRPC", editable endpoint "localhost:50051", small "TLS 关闭" control, small timeout "5 s", and prominent green button with play icon "发送" and shortcut "⌘ ↵". Everything aligned in one row.
+6) Below split main area into two equally sized columns with vertical divider, left Request, right Response. Left tabs "请求体" selected with green underline, "Metadata" count 2, "认证", "设置". Right header "响应" then elegant green dot and "0 OK" followed by muted "42 ms" and "286 B"; rightmost copy icon. Left editor utility row "JSON" dropdown, "生成示例", "格式化". Right subtabs "消息" selected, "Headers" with 3 count, "Trailers" with 2 count, "JSON" at end.
+7) Large JSON editors with line numbers, indentation guides, readable text and restrained syntax colors (keys muted dark teal, strings muted brown, booleans violet gray). Left exact JSON:
+{
+  "user_id": "usr_1024",
+  "include_profile": true
+}
+Right exact JSON:
+{
+  "id": "usr_1024",
+  "name": "Alex Chen",
+  "email": "alex@example.com",
+  "status": "ACTIVE",
+  "profile": {
+    "team": "Platform",
+    "role": "Engineer",
+    "region": "ap-southeast-1"
+  },
+  "created_at": "2026-10-25T08:30:00Z"
+}
+Lots of useful calm blank editor space below this text. Bottom of request pane has subdued inline validation check "符合 GetUserRequest 定义". Bottom of response pane faint "响应已完成".
+8) A slim collapsed lower drawer just above status bar, label "调用记录" with count 3 and chevron. A single compact latest call summary in same strip "GetUser  ·  0 OK  ·  42 ms" aligned right. Not a large table.
+9) 26px bottom status bar: left green status dot "Proto 已加载" and "3 个文件 · 8 个方法"; right "UTF-8" and "本地工作区".
+Render Chinese characters correctly, text crisp and reasonably large, fit all elements without clipping. Hierarchical thoughtful spacing. Make it feel like an excellent real native development tool designed for everyday debugging. One screen only.

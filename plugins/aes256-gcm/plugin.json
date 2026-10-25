@@ -1,0 +1,1 @@
+{"api_version":1,"id":"aes256-gcm","name":"AES-256-GCM · 示例","description":"加密指定 Metadata 值，移除原文头。输出 Base64(nonce 12 字节 + 密文 + tag 16 字节)。","secret_encoding":"hex","fields":[{"key":"source_header","label":"原文头名称","default":"x-payload"},{"key":"target_header","label":"密文头名称","default":"x-encrypted"},{"key":"aad","label":"附加认证数据 AAD","default":""}]}

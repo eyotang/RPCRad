@@ -1,0 +1,1 @@
+{"api_version":1,"id":"hmac-sha256","name":"HMAC-SHA256 · 示例","description":"签名内容：method + 换行 + 毫秒时间戳 + 换行 + 请求体 JSON 原文。","secret_encoding":"utf8","fields":[{"key":"signature_header","label":"签名头名称","default":"x-signature"},{"key":"timestamp_header","label":"时间戳头名称","default":"x-timestamp"}]}

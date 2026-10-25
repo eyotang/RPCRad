@@ -1,0 +1,9 @@
+syntax = "proto3";
+package order.v1;
+service OrderService {
+  rpc GetOrder(OrderRequest) returns (Order);
+  rpc ListOrders(OrderRequest) returns (OrderList);
+}
+message OrderRequest { string order_id = 1; }
+message Order { string id = 1; string status = 2; double amount = 3; }
+message OrderList { repeated Order orders = 1; }
