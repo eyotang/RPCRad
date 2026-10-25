@@ -69,10 +69,12 @@ jobs:
         if: matrix.platform == 'macos-arm64'
         run: cargo clippy --all-targets --all-features --locked -- -D warnings
       - name: Build native packages
+        id: package
         run: |
           version=$(python -c 'import tomllib; print(tomllib.load(open("Cargo.toml","rb"))["package"]["version"])')
           if [[ "$GITHUB_REF" == refs/tags/* ]]; then test "$GITHUB_REF_NAME" = "v$version"; fi
           python tools/release.py --tag "v$version" --platform '${{ matrix.platform }}'
+          echo "assets=release-assets/v$version" >> "$GITHUB_OUTPUT"
       - name: Test relocated native application
         if: runner.os != 'Linux'
         run: python tools/smoke.py --app '${{ matrix.app }}' --packaged --gui
@@ -87,7 +89,7 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: packages-${{ matrix.platform }}
-          path: release-assets/v*/*
+          path: ${{ steps.package.outputs.assets }}
           if-no-files-found: error
           retention-days: 14
   arch-wayland:
@@ -105,6 +107,7 @@ jobs:
           docker run --rm -v "$PWD:/work" -w /work archlinux:base-devel bash -euc '
             pacman -Syu --noconfirm --needed python go git fontconfig freetype2 libxkbcommon libxkbcommon-x11 libxcb libx11 wayland vulkan-icd-loader vulkan-swrast alsa-lib openssl zstd xdg-utils xdg-desktop-portal xdg-desktop-portal-gtk noto-fonts noto-fonts-cjk weston dbus
             pacman -U --noconfirm arch-packages/*.pkg.tar.zst
+            git config --global --add safe.directory /work
             python tools/setup.py
             python tools/wayland-smoke.py
           '
