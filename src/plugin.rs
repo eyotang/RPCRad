@@ -49,6 +49,8 @@ pub struct Plugin {
 pub struct Settings {
     #[serde(default)]
     pub directory: Option<PathBuf>,
+    #[serde(default)]
+    pub secret_reference: String,
     pub enabled: bool,
     pub selected: String,
     pub values: BTreeMap<String, BTreeMap<String, String>>,

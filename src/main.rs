@@ -6,6 +6,7 @@ mod plugin;
 mod rpc;
 mod ui;
 mod updater;
+mod variables;
 use gpui_kit::component::{Theme, ThemeMode};
 use gpui_kit::*;
 

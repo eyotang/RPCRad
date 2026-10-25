@@ -5,6 +5,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 #[derive(Clone)]
 pub(super) struct HistoryEntry {
     pub method: String,
+    pub environment: String,
     pub endpoint: String,
     pub body: String,
     pub reply: Reply,
@@ -21,8 +22,10 @@ impl HistoryEntry {
         connection: &Connection,
         body: String,
         plugin: Option<String>,
+        environment: String,
     ) -> Self {
         Self {
+            environment,
             method: method.path(),
             endpoint: connection.endpoint.clone(),
             body,
@@ -130,6 +133,7 @@ impl Workbench {
     ) {
         if let Some(entry) = self.history.get(index) {
             self.about_open = false;
+            self.environments_open = false;
             self.history_detail = Some(entry.clone());
             self.history_tab = 0;
             self.history_revealed.clear();
@@ -202,6 +206,7 @@ impl Workbench {
             .child(Button::new("history-back").ghost().label("返回调试").on_click(cx.listener(|this,_,_,cx| {this.history_detail = None; cx.notify();})))
             .child(div().font_weight(FontWeight::SEMIBOLD).child("调用详情"))
             .child(badge("只读快照"))
+            .child(badge(format!("环境：{}",entry.environment)))
             .child(div().flex_1())
             .child(Button::new("history-load").label("载入请求").disabled(self.busy || self.discovering)
                 .tooltip("载入地址、请求体与连接设置；不会复用旧签名")
@@ -253,6 +258,7 @@ mod tests {
     fn entry() -> HistoryEntry {
         HistoryEntry {
             method: "S/M".into(),
+            environment: "测试".into(),
             endpoint: "localhost".into(),
             body: "{}".into(),
             reply: Reply::default(),

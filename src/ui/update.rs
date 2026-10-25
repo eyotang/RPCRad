@@ -3,6 +3,7 @@ use crate::updater;
 impl Workbench {
     pub fn show_about(&mut self, check: bool, cx: &mut Context<Self>) {
         self.about_open = true;
+        self.environments_open = false;
         if check {
             self.check_update(cx);
         }

@@ -24,7 +24,8 @@ impl PluginUi {
         let (catalog, errors) = plugin::builtin_catalog();
         let secret = cx.new(|cx| {
             InputState::new(window, cx)
-                .placeholder("secret · 仅本次会话")
+                .placeholder("secret 或 {{secret}} · 敏感值仅本次会话")
+                .default_value(settings.secret_reference.clone())
                 .masked(true)
         });
         let mut state = Self {
@@ -70,6 +71,12 @@ impl PluginUi {
                 .values
                 .insert(settings.selected.clone(), self.values(cx));
         }
+        let secret = self.secret.read(cx).value();
+        settings.secret_reference = if crate::variables::is_reference(&secret) {
+            secret.to_string()
+        } else {
+            String::new()
+        };
         settings
     }
     fn values(&self, cx: &App) -> BTreeMap<String, String> {
@@ -118,7 +125,11 @@ impl PluginUi {
                 }));
         }
     }
-    pub(super) fn execution(&self, cx: &App) -> anyhow::Result<Option<Execution>> {
+    pub(super) fn execution(
+        &self,
+        resolver: &crate::variables::Resolver<'_>,
+        cx: &App,
+    ) -> anyhow::Result<Option<Execution>> {
         if !self.settings.enabled {
             return Ok(None);
         }
@@ -136,8 +147,12 @@ impl PluginUi {
             .clone();
         Ok(Some(Execution {
             plugin,
-            config: self.values(cx),
-            secret: Zeroizing::new(self.secret.read(cx).value().to_string()),
+            config: self
+                .values(cx)
+                .into_iter()
+                .map(|(key, value)| Ok((key, resolver.text(&value)?)))
+                .collect::<anyhow::Result<_>>()?,
+            secret: Zeroizing::new(resolver.text(&self.secret.read(cx).value())?),
         }))
     }
     pub(super) fn poll(&mut self, window: &mut Window, cx: &mut Context<Workbench>) {
@@ -202,9 +217,11 @@ impl Workbench {
     }
     fn preview_plugin(&mut self, cx: &mut Context<Self>) {
         let result = (|| -> anyhow::Result<_> {
+            let variables = self.environments.snapshot(cx);
+            let resolver = variables.resolver()?;
             let execution = self
                 .plugins
-                .execution(cx)?
+                .execution(&resolver, cx)?
                 .ok_or_else(|| anyhow::anyhow!("请先启用插件"))?;
             let method = self
                 .current()
@@ -212,9 +229,9 @@ impl Workbench {
                 .path();
             Ok((
                 execution,
-                self.connection(cx)?,
+                self.resolved_connection(&resolver, cx)?,
                 method,
-                self.request.read(cx).value().to_string(),
+                resolver.json(&self.request.read(cx).value())?,
             ))
         })();
         match result {
@@ -330,26 +347,29 @@ impl Workbench {
                     }
                     .to_string();
                     let options = field.options.clone();
-                    field_row = field_row.child(
-                        Button::new(("plugin-option", index))
-                            .label(label)
-                            .disabled(self.busy)
-                            .on_click(cx.listener(move |this, _, window, cx| {
-                                let input = &this.plugins.fields[index].1;
-                                let current = input.read(cx).value();
-                                let next = options
-                                    .iter()
-                                    .position(|o| o == current.as_ref())
-                                    .map(|i| (i + 1) % options.len())
-                                    .unwrap_or(0);
-                                input.update(cx, |s, cx| {
-                                    s.set_value(options[next].clone(), window, cx)
-                                });
-                                this.plugins.invalidate();
-                                this.save(cx);
-                                cx.notify();
-                            })),
-                    );
+                    field_row = field_row
+                        .child(div().flex_1().child(Input::new(input).disabled(self.busy)))
+                        .child(
+                            Button::new(("plugin-option", index))
+                                .label("切换选项")
+                                .tooltip(label)
+                                .disabled(self.busy)
+                                .on_click(cx.listener(move |this, _, window, cx| {
+                                    let input = &this.plugins.fields[index].1;
+                                    let current = input.read(cx).value();
+                                    let next = options
+                                        .iter()
+                                        .position(|o| o == current.as_ref())
+                                        .map(|i| (i + 1) % options.len())
+                                        .unwrap_or(0);
+                                    input.update(cx, |s, cx| {
+                                        s.set_value(options[next].clone(), window, cx)
+                                    });
+                                    this.plugins.invalidate();
+                                    this.save(cx);
+                                    cx.notify();
+                                })),
+                        );
                 }
                 panel = panel.child(field_row);
             }
@@ -367,7 +387,7 @@ impl Workbench {
                         ),
                 )
                 .child(div().text_xs().text_color(rgb(MUTED)).child(format!(
-                    "密钥编码：{}。Secret 不保存；上面的普通参数会保存到本地。",
+                    "密钥编码：{}。Secret 明文不保存，{{{{secret}}}} 引用会保存；普通参数支持 {{{{变量名}}}}。",
                     plugin.manifest.secret_encoding
                 )));
         }

@@ -59,7 +59,7 @@ Linux 工作区：`${XDG_DATA_HOME:-~/.local/share}/RPCRad/workspace.json`。所
 
 ```sh
 cargo run --locked
-python tools/release.py --tag v0.2.0
+python tools/release.py --tag v0.3.0
 ```
 
-发布脚本在当前平台原生构建：Mac 使用 `hdiutil`，Windows 安装器需要 Inno Setup 6，Linux 包需要 `dpkg-deb`、`tar` 与 `zstd`。生成最终更新清单时必须集齐所有平台包：`python tools/release.py --tag v0.2.0 --manifest-only`。
+发布脚本在当前平台原生构建：Mac 使用 `hdiutil`，Windows 安装器需要 Inno Setup 6，Linux 包需要 `dpkg-deb`、`tar` 与 `zstd`。生成最终更新清单时必须集齐所有平台包：`python tools/release.py --tag v0.3.0 --manifest-only`。

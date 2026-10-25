@@ -1,4 +1,6 @@
+mod environments;
 mod headers;
+use environments::EnvironmentUi;
 mod history;
 mod update;
 use history::HistoryEntry;
@@ -99,9 +101,13 @@ struct Saved {
     selected: String,
     #[serde(default)]
     plugin: crate::plugin::Settings,
+    #[serde(default)]
+    variables: crate::variables::Variables,
 }
 
 pub struct Workbench {
+    environments: EnvironmentUi,
+    environments_open: bool,
     about_open: bool,
     plugins: PluginUi,
     methods: Vec<Method>,
@@ -292,7 +298,10 @@ impl Workbench {
             true
         });
         let plugins = PluginUi::new(saved.plugin, window, cx);
+        let environments = EnvironmentUi::new(saved.variables, window, cx);
         let mut state = Self {
+            environments,
+            environments_open: false,
             plugins,
             methods,
             protos,
@@ -359,6 +368,7 @@ impl Workbench {
             favorites: self.favorites.clone(),
             selected: self.current().map(Method::path).unwrap_or_default(),
             plugin: self.plugins.settings(cx),
+            variables: self.environments.snapshot(cx),
         };
         let result = (|| -> anyhow::Result<()> {
             let path = state_path();
@@ -384,6 +394,7 @@ impl Workbench {
         self.save(cx);
         self.history_detail = None;
         self.about_open = false;
+        self.environments_open = false;
         self.plugins.invalidate();
         self.selected = index;
         if !self.tabs.contains(&index) {
@@ -409,7 +420,15 @@ impl Workbench {
         cx.notify();
     }
     fn connection(&self, cx: &App) -> anyhow::Result<Connection> {
-        let raw = self.endpoint.read(cx).value();
+        let variables = self.environments.snapshot(cx);
+        self.resolved_connection(&variables.resolver()?, cx)
+    }
+    fn resolved_connection(
+        &self,
+        resolver: &crate::variables::Resolver<'_>,
+        cx: &App,
+    ) -> anyhow::Result<Connection> {
+        let raw = resolver.text(&self.endpoint.read(cx).value())?;
         let endpoint = raw
             .trim()
             .trim_start_matches("https://")
@@ -424,13 +443,13 @@ impl Workbench {
             timeout: self.timeout,
             protos: self.protos.clone(),
             metadata: rpc::metadata(
-                &self.metadata.read(cx).value(),
-                &self.token.read(cx).value(),
+                &resolver.json(&self.metadata.read(cx).value())?,
+                &resolver.text(&self.token.read(cx).value())?,
             )?,
         })
     }
     fn send(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.history_detail.is_some() || self.about_open {
+        if self.history_detail.is_some() || self.about_open || self.environments_open {
             return;
         }
         if self.busy {
@@ -450,24 +469,23 @@ impl Workbench {
             cx.notify();
             return;
         }
-        let body = self.request.read(cx).value().to_string();
-        if let Err(error) = serde_json::from_str::<serde_json::Value>(&body) {
-            self.notice = format!("JSON 格式错误：{error}");
-            cx.notify();
-            return;
-        }
-        let mut connection = match self.connection(cx) {
-            Ok(c) => c,
+        let prepared = (|| -> anyhow::Result<_> {
+            let variables = self.environments.snapshot(cx);
+            let resolver = variables.resolver()?;
+            let body = resolver.json(&self.request.read(cx).value())?;
+            let connection = self.resolved_connection(&resolver, cx)?;
+            let plugin = self.plugins.execution(&resolver, cx)?;
+            Ok((
+                body,
+                connection,
+                plugin,
+                variables.active_name().to_string(),
+            ))
+        })();
+        let (body, mut connection, plugin, environment) = match prepared {
+            Ok(prepared) => prepared,
             Err(error) => {
-                self.notice = error.to_string();
-                cx.notify();
-                return;
-            }
-        };
-        let plugin = match self.plugins.execution(cx) {
-            Ok(plugin) => plugin,
-            Err(error) => {
-                self.notice = error.to_string();
+                self.notice = format!("未发送：{error}");
                 cx.notify();
                 return;
             }
@@ -484,6 +502,7 @@ impl Workbench {
             &connection,
             body.clone(),
             plugin.as_ref().map(|p| p.plugin.manifest.name.clone()),
+            environment,
         ));
         self.cancel = Arc::new(AtomicBool::new(false));
         let cancel = self.cancel.clone();
@@ -668,6 +687,11 @@ impl Workbench {
         } else {
             self.request.clone()
         };
+        if editor.read(cx).value().contains("{{") {
+            self.notice = "含变量模板的内容保留原样；发送前会替换并验证 JSON".into();
+            cx.notify();
+            return;
+        }
         match serde_json::from_str::<serde_json::Value>(&editor.read(cx).value())
             .and_then(|v| serde_json::to_string_pretty(&v))
         {
@@ -973,7 +997,9 @@ impl Workbench {
 impl Render for Workbench {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let sidebar = self.sidebar(cx).into_any_element();
-        let workspace = if self.about_open {
+        let workspace = if self.environments_open {
+            self.environments_panel(cx).into_any_element()
+        } else if self.about_open {
             self.about_panel(cx).into_any_element()
         } else if self.history_detail.is_some() {
             self.history_panel(cx).into_any_element()
@@ -1046,7 +1072,14 @@ impl Render for Workbench {
                                 })),
                         )
                     })
-                    .child(badge("●  Local"))
+                    .child(self.environment_selector(cx))
+                    .child(
+                        Button::new("manage-variables")
+                            .ghost()
+                            .icon(IconName::Braces)
+                            .label("变量")
+                            .on_click(cx.listener(|this, _, _, cx| this.open_environments(cx))),
+                    )
                     .child(
                         Button::new("command-search")
                             .ghost()
@@ -1064,6 +1097,7 @@ impl Render for Workbench {
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.about_open = false;
                                 this.history_detail = None;
+                                this.environments_open = false;
                                 this.request_tab = 3;
                                 cx.notify();
                             })),
@@ -1760,8 +1794,11 @@ impl Workbench {
                     .child(self.update_panel(cx)),
             );
         }
-        let valid =
-            serde_json::from_str::<serde_json::Value>(&self.request.read(cx).value()).is_ok();
+        let variables = self.environments.snapshot(cx);
+        let validation = variables
+            .resolver()
+            .and_then(|r| r.json(&self.request.read(cx).value()));
+        let valid = validation.is_ok();
         column()
             .size_full()
             .bg(rgb(0xffffff))
@@ -1779,10 +1816,9 @@ impl Workbench {
                     } else {
                         IconName::CircleAlert
                     }))
-                    .child(if valid {
-                        "JSON 格式有效"
-                    } else {
-                        "JSON 格式有误，请检查请求体"
+                    .child(match validation {
+                        Ok(_) => "变量与 JSON 有效".to_string(),
+                        Err(error) => error.to_string(),
                     }),
             )
     }
@@ -1953,8 +1989,32 @@ impl Workbench {
 
 pub fn plugin_smoke_test() -> anyhow::Result<()> {
     use crate::plugin::{self, Execution};
+    use crate::variables::{Environment, Variable, Variables};
+    let variable = |name: &str, value: &str, sensitive| Variable {
+        name: name.into(),
+        value: value.into(),
+        sensitive,
+    };
+    let variables = Variables {
+        globals: vec![
+            variable("appid", "wrong-global-app", false),
+            variable("endpoint", "127.0.0.1:50052", false),
+        ],
+        environments: vec![Environment {
+            id: 1,
+            name: "签名测试".into(),
+            variables: vec![
+                variable("appid", "rpcrad-test", false),
+                variable("secret", "rpcrad-test-secret", true),
+                variable("user_id", "signature_verified", false),
+                variable("include_profile", "true", false),
+            ],
+        }],
+        active: Some(1),
+    };
+    let resolver = variables.resolver()?;
     let connection = Connection {
-        endpoint: "127.0.0.1:50052".into(),
+        endpoint: resolver.text("{{endpoint}}")?,
         timeout: 5,
         protos: example_protos(),
         ..Default::default()
@@ -1970,18 +2030,19 @@ pub fn plugin_smoke_test() -> anyhow::Result<()> {
         .find(|p| p.manifest.id == "md5-appid-ts")
         .ok_or_else(|| anyhow::anyhow!("MD5 plugin missing"))?;
     let mut config = plugin.defaults();
-    config.insert("appid".into(), "rpcrad-test".into());
+    config.insert("appid".into(), resolver.text("{{appid}}")?);
     let execution = Execution {
         plugin,
         config,
-        secret: zeroize::Zeroizing::new("rpcrad-test-secret".into()),
+        secret: zeroize::Zeroizing::new(resolver.text("{{secret}}")?),
     };
-    let body = r#"{"user_id":"signature_verified"}"#;
+    let body =
+        resolver.json(r#"{"user_id":"{{user_id}}","include_profile":{{include_profile}}}"#)?;
     let headers = execution.run(
         &method.path(),
         &connection.endpoint,
-        body,
-        vec![],
+        &body,
+        rpc::metadata(&resolver.json(r#"{"x-app":"{{appid}}"}"#)?, "")?,
         Arc::new(AtomicBool::new(false)),
     )?;
     for valid in [true, false] {
@@ -2001,7 +2062,7 @@ pub fn plugin_smoke_test() -> anyhow::Result<()> {
                 ..connection.clone()
             },
             method.clone(),
-            body.into(),
+            body.clone(),
             Arc::new(AtomicBool::new(false)),
             tx,
         );
@@ -2029,7 +2090,10 @@ pub fn plugin_smoke_test() -> anyhow::Result<()> {
             .ok_or_else(|| anyhow::anyhow!("No response"))?;
         if valid {
             anyhow::ensure!(
-                reply.status == "0 OK" && reply.headers.contains("x-signature-verified: true"),
+                reply.status == "0 OK"
+                    && reply.headers.contains("x-signature-verified: true")
+                    && reply.body.contains("signature_verified")
+                    && reply.body.contains("Platform"),
                 "Signature rejected: {reply:?}"
             );
         } else {
@@ -2040,7 +2104,7 @@ pub fn plugin_smoke_test() -> anyhow::Result<()> {
         }
     }
     println!(
-        "PASS: actual grpcurl sends matching millisecond timestamp and MD5 headers; independent Go verifier accepts valid and rejects tampered signatures."
+        "PASS: environment variables resolve in body, headers and plugin; actual grpcurl sends matching millisecond timestamp and MD5 headers; independent Go verifier accepts valid and rejects tampered signatures."
     );
     Ok(())
 }

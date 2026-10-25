@@ -12,7 +12,9 @@
 
 时间戳只读取一次，签名与 `ts` 头完全一致。三个头名称及大小写可调整；与已有 Metadata 同名时覆盖。每次发送重新计算，预览不会被复用。
 
-Secret 使用密码框，仅保留在当前会话。AppID、单位、头名称等普通参数会存到 用户数据目录的 `workspace.json`（macOS：`~/Library/Application Support/RPCRad/`）；不要把密钥填入普通参数。脚本不会拿到 secret 原文，只能通过宿主提供的密码函数使用它。
+Secret 使用密码框，明文仅保留在当前会话。AppID、单位、头名称等普通参数会存到 用户数据目录的 `workspace.json`（macOS：`~/Library/Application Support/RPCRad/`）；不要把密钥填入普通参数。脚本不会直接拿到 Secret 框的原文，只能通过宿主提供的密码函数使用它。
+
+所有参数与 Secret 框均可使用 `{{变量名}}`，例如 AppID 为 `{{appid}}`、Secret 为 `{{secret}}`。当前环境覆盖同名全局变量，发送和预览前先解析变量再执行脚本。Secret 框中的完整变量引用会保存，敏感变量值不会落盘。变量不是脚本全局对象：将需要的普通变量通过 `config` 字段传入，密钥通过 Secret 字段传入。
 
 ## 添加自己的插件
 
@@ -34,17 +36,17 @@ Secret 使用密码框，仅保留在当前会话。AppID、单位、头名称�
 }
 ```
 
-`fields` 最多 16 个字符串字段。有 `options` 时以切换按钮显示，否则为输入框。密钥编码为 `utf8`、`hex` 或 `base64`，在宿主解码后交给密码函数。
+`fields` 最多 16 个字符串字段。所有字段均可直接输入变量引用；有 `options` 时额外显示“切换选项”按钮。密钥编码为 `utf8`、`hex` 或 `base64`，在宿主解码后交给密码函数。
 
 Rhai 脚本中可使用：
 
 | 名称 | 内容 |
 | --- | --- |
-| `config` | 界面输入的普通参数对象，值均为字符串 |
+| `config` | 变量解析后的普通参数对象，值均为字符串 |
 | `metadata` | 原始 Metadata，已合并 Bearer token，可修改 |
 | `request.method` | `/完整服务名/方法名` |
 | `request.endpoint` | 规范化后的目标地址 |
-| `request.body` | 编辑器中的 JSON 原文，不是 protobuf 二进制消息 |
+| `request.body` | 变量解析后即将发送的 JSON 文本，不是 protobuf 二进制消息 |
 | `request.timestamp_ms` | 当前 Unix 毫秒时间戳字符串 |
 | `request.timestamp` | 同一时刻的 Unix 秒时间戳字符串 |
 | `md5_secret_wrap(data)` | 小写 hex MD5(secret + data + secret) |
