@@ -36,7 +36,7 @@ env = os.environ.copy()
 env["GOPATH"] = str(root/".cache/go")
 env["GOCACHE"] = str(root/".cache/go-build")
 # Read the exact modules linked into grpcurl; avoid unrelated upstream test dependencies.
-info = subprocess.check_output(["go", "version", "-m", str(root/"tools/bin/grpcurl")], env=env).decode()
+info = subprocess.check_output(["go", "version", "-m", str(root/"tools/bin"/("grpcurl.exe" if os.name == "nt" else "grpcurl"))], env=env).decode()
 def escaped(value):
     return "".join("!" + c.lower() if c.isupper() else c for c in value)
 for line in info.splitlines():

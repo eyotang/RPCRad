@@ -113,6 +113,6 @@ impl Workbench {
                     .child(Button::new("download-update").primary().label(format!("下载 {}",release.version))
                         .on_click(cx.listener(move |_,_,_,cx|{ if let Some(url)=updater::release_page(&version) { cx.open_url(&url); } })))
             })
-            .child(div().text_xs().text_color(rgb(MUTED)).child("启动时自动检查。macOS 更新打开 GitHub 对应版本下载页；替换应用后保留本地工作区配置。"))
+            .child(div().text_xs().text_color(rgb(MUTED)).child("启动时自动检查。更新会打开对应版本下载页；选择适合系统的安装包，升级后保留本地工作区配置。"))
     }
 }

@@ -1,31 +1,26 @@
 # 发布与更新
 
-RPCRad 使用 Metra 当前的 macOS 发布契约：GitHub Release + `latest.json` + DMG + SHA-256。应用仍使用 GPUI，不迁移到 Tauri。
+使用 Metra 风格的 GitHub Release + `latest.json` + SHA-256 契约，所有平台打开官方版本下载页，由用户安装。没有签名验证链的自动执行安装器，不复用 Metra 的任何私钥。
 
 ## 自动发布
 
-1. 修改 `Cargo.toml` 版本，运行 `cargo check` 更新 `Cargo.lock`，添加 `docs/releases/vX.Y.Z.md`。
-2. 运行格式、测试、Clippy 和 `python3 -m unittest discover -s tools/tests`。
-3. 提交到 `main`，创建并推送对应的 `vX.Y.Z` 标签。
-4. GitHub Actions 先验证，再构建 DMG、校验和与 `latest.json`，执行打包程序的实际 gRPC 验签测试，最后上传到草稿 Release 并发布为 latest。版本号必须完全一致。
+1. 修改 Cargo.toml 与 Cargo.lock 版本，添加 `docs/releases/vX.Y.Z.md`。
+2. 本地执行 `cargo fmt --all -- --check`、`cargo test --locked`、Clippy、`python -m unittest discover -s tools/tests`。
+3. 提交 main。工作流在 Apple Silicon、Intel Mac、Windows x64、Ubuntu x64 原生构建安装包，测试被移动到新目录后的包，验证真实请求、签名、原生窗口帧；另在 Arch 容器安装包并测试 Wayland。
+4. 创建并推送与版本严格匹配的标签。所有平台与 Arch 验证通过后，汇总七种包及各自 SHA-256，检查没有遗漏或意外文件，再生成兼容旧客户端的 latest.json，先上传到草稿，再公开发布为 latest。
 
-工作流仅使用仓库的 `GITHUB_TOKEN`（发布任务需要 contents:write）。首版仅发布 macOS arm64，不需要也不复用 Metra 的 Windows 签名私钥。已发布版本禁止覆写；修复请递增版本。失败在草稿阶段可重新运行同一标签任务。
+`.dmg`（arm64/x64）、Windows `.exe` 安装器及 `.zip`、Linux `.tar.gz`、Ubuntu `.deb`、Arch `.pkg.tar.zst`。不能只上传某个平台就更新 latest。公开版本不能覆写；修复递增版本。失败停在草稿阶段可以重跑。
 
-## 本地构建
+主分支每次通过后的构建产物保存 14 天，也可以下载这些**同一提交、全部通过验证**的产物发布；先创建对应标签，避免与自动发布任务重复写入。只有发布任务获得 contents:write，构建验证任务只读。
 
-需要 Apple Silicon Mac、macOS Command Line Tools、Rust stable、Go、Python 3.11+。
+## 本机构建
 
-```sh
-sh tools/setup.sh
-python3 tools/release.py --tag v0.1.0
-```
+`python tools/setup.py` 安装固定版本 grpcurl 和本地示例服务。`python tools/release.py --tag vX.Y.Z` 构建当前 OS/架构，产物在 release-assets/vX.Y.Z。Mac 的 `.app` 在 dist/release，Windows/Linux 的完整目录在 dist/平台/RPCRad。
 
-产物位于 `release-assets/v0.1.0/`。脚本检查资源集合、版本、DMG 和 SHA-256；输出目录出现额外文件会阻止生成清单。应用包不包含本机 `.rpcrad`、配置、密钥或调用记录。
+资源和用户配置分离。外部 grpcurl 使用当前系统可执行文件后缀，Windows 调用不弹出命令窗口；内置 Proto 随应用移动。Windows EXE 内嵌图标，Linux 系统包安装 desktop entry 与图标。
 
-应用内“设置 → 检查更新”读取 `https://github.com/eyotang/RPCRad/releases/latest/download/latest.json`。只有更高的稳定版本会触发通知；HTTPS 超时、无效版本、超大清单会显示错误。下载按钮只打开此仓库的对应版本页。
+## 验证边界
 
-macOS 安装包当前采用 ad-hoc 签名，没有 Developer ID 或 Apple 公证。若以后增加自动替换安装或 Windows 安装器，需要单独配置 RPCRad 的签名与验证链，不能仅凭清单中的下载地址执行文件。
+原生 UI smoke test 等待实际绘制两帧后才成功；CLI 成功不作为 UI 成功的替代。Linux 的 CI 覆盖 Ubuntu/X11 和 Arch/Wayland。Omarchy 的 Hyprland 日常桌面、不同显卡与显示缩放仍需用户设备验证。Windows / Linux ARM64 暂无构建。
 
-## 本地数据
-
-macOS 工作区位置：`~/Library/Application Support/RPCRad/workspace.json`。示例 Proto 使用与安装路径无关的引用保存。插件 Secret、Bearer Token、Metadata 和调用历史不持久化。设置 `RPCRAD_DATA_DIR` 可在测试时使用隔离工作区。
+目前 macOS ad-hoc 签名且未公证，Windows 安装器未 Authenticode 签名。macOS 的按需 xattr 命令在 [安装说明](INSTALL.md) 中；程序、安装器和构建脚本不会自动清除用户应用隔离属性或关闭安全保护。

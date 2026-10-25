@@ -70,17 +70,25 @@ pub enum Event {
 }
 
 fn executable() -> PathBuf {
-    let bundled = std::env::current_exe()
-        .ok()
-        .and_then(|p| p.parent().map(|p| p.join("grpcurl")));
+    let bundled = std::env::current_exe().ok().and_then(|p| {
+        p.parent()
+            .map(|p| p.join(crate::paths::executable_name("grpcurl")))
+    });
     if let Some(path) = bundled.filter(|p| p.exists()) {
         return path;
     }
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tools/bin/grpcurl")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tools/bin")
+        .join(crate::paths::executable_name("grpcurl"))
 }
 
 fn command(connection: &Connection, network: bool) -> Command {
     let mut cmd = Command::new(executable());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW for the bundled grpcurl process.
+    }
     cmd.args(["-max-time", &connection.timeout.max(1).to_string()]);
     if network && !connection.tls {
         cmd.arg("-plaintext");

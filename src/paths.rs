@@ -16,11 +16,18 @@ pub fn legacy_state_path() -> PathBuf {
 }
 pub fn resources() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
-    let macos = exe.parent()?;
-    if macos.file_name()? != "MacOS" {
-        return None;
+    resource_directory(&exe).filter(|path| path.is_dir())
+}
+fn resource_directory(exe: &Path) -> Option<PathBuf> {
+    let parent = exe.parent()?;
+    if parent.file_name().is_some_and(|name| name == "MacOS") {
+        Some(parent.parent()?.join("Resources"))
+    } else {
+        Some(parent.join("resources"))
     }
-    Some(macos.parent()?.join("Resources"))
+}
+pub fn executable_name(name: &str) -> String {
+    format!("{name}{}", std::env::consts::EXE_SUFFIX)
 }
 pub fn examples() -> Vec<PathBuf> {
     let root = resources()
@@ -58,6 +65,22 @@ pub fn load_proto(path: &Path) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn resources_are_relative_to_the_packaged_executable_on_each_platform() {
+        for (exe, expected) in [
+            (
+                "/Applications/RPCRad.app/Contents/MacOS/RPCRad",
+                "/Applications/RPCRad.app/Contents/Resources",
+            ),
+            ("/opt/rpcrad/rpcrad", "/opt/rpcrad/resources"),
+            ("portable/RPCRad/RPCRad.exe", "portable/RPCRad/resources"),
+        ] {
+            assert_eq!(
+                resource_directory(Path::new(exe)),
+                Some(PathBuf::from(expected))
+            );
+        }
+    }
     #[test]
     fn bundled_examples_survive_application_relocation() {
         for path in examples() {

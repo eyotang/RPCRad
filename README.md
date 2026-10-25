@@ -4,9 +4,20 @@
 
 ## 安装与更新
 
-从 [GitHub Releases](https://github.com/eyotang/RPCRad/releases/latest) 下载 DMG，将 RPCRad 拖入 Applications。首版支持 macOS 14+ 的 Apple Silicon，包内含 grpcurl 和示例 Proto，无需 Rust / Go。安装包采用 ad-hoc 签名，尚未使用 Apple Developer ID 签名或公证。
+从 [GitHub Releases](https://github.com/eyotang/RPCRad/releases/latest) 下载对应系统和架构的包。v0.2.0 起提供：
 
-沿用 Metra 的 macOS 更新流程：启动时检查 `latest.json`；也可通过 macOS 顶部 **RPCRad → 检查更新…** 主动检查，结果和下载按钮会直接显示。**RPCRad → 关于 RPCRad…** 显示当前版本、项目主页和更新入口。设置页也保留检查入口。发现新版本后点击下载，打开对应 GitHub Release，下载并替换应用。工作区配置保留，Secret 仍需在新会话填写。
+| 系统 | 架构 | 包 |
+| --- | --- | --- |
+| macOS 15+ | Apple Silicon / Intel | 各自独立的 `.dmg` |
+| Windows 10/11 | x64 | `-setup.exe` 安装器、便携 `.zip` |
+| Ubuntu 24.04+ | x64 | `.deb`、便携 `.tar.gz` |
+| Omarchy / Arch Linux | x64 | `.pkg.tar.zst`、便携 `.tar.gz`，原生 Wayland 与 X11 |
+
+所有包包含 grpcurl、示例 Proto 和依赖许可证，不需要安装 Rust 或 Go。Windows 安装器创建开始菜单入口并支持卸载；Linux 系统包安装应用菜单和图标。安装步骤、依赖与 macOS `xattr` 命令见 [安装说明](docs/INSTALL.md)。
+
+沿用 Metra 的 GitHub Release + `latest.json` 更新发现方式。macOS 顶部 **RPCRad → 关于 RPCRad… / 检查更新…**；Windows/Linux 在窗口顶部 **RPCRad** 下拉菜单中操作，设置页也保留入口。启动时自动检查，手动检查会直接显示结果与下载按钮。下载并安装对应平台的新包后，工作区配置保留。当前所有平台均由用户确认安装更新，没有后台静默替换程序。
+
+Secret 和调用历史仅保存在当前会话，重启后需要重新填写 Secret。macOS 包暂未 Developer ID 签名及公证，Windows 安装器暂未 Authenticode 签名。
 
 ## 源码本地示例
 
@@ -42,7 +53,7 @@ tools/bin/rpcrad-demo
 
 查看记录不会改变当前请求；使用“载入请求”才恢复地址、请求体和连接设置，请求头仍使用当前配置，插件在下次发送时重新计算。
 
-预览版暂不包含客户端流、双向流、自定义 CA / mTLS、多环境管理与完整的 Proto import-root 管理。Proto 的父目录会自动作为 import path；复杂跨目录依赖需要后续增加自定义 import path。响应展示最多保留 8 MiB。示例 Proto 随应用打包，发布版不依赖源码目录。Windows、Linux 与 Intel 安装包尚未提供。
+预览版暂不包含客户端流、双向流、自定义 CA / mTLS、多环境管理与完整的 Proto import-root 管理。Proto 的父目录会自动作为 import path；复杂跨目录依赖需要后续增加自定义 import path。响应展示最多保留 8 MiB。示例 Proto 随应用打包，发布版不依赖源码目录。Windows / Linux Arm64 安装包尚未提供。
 
 ## 请求头签名
 
@@ -56,7 +67,7 @@ tools/bin/rpcrad-demo
 
 ## 开发与验证
 
-需要 Rust stable、Go、Python 3.11+ 和 macOS Command Line Tools。
+需要 Rust stable、Go、Python 3.11+，以及对应系统的本地构建工具，见 [安装说明](docs/INSTALL.md)。
 
 ```sh
 sh tools/setup.sh
@@ -77,7 +88,7 @@ cargo run --locked -- --smoke-test
 
 ## 发布
 
-推送与 Cargo 版本一致的 `vX.Y.Z` 标签，GitHub Actions 会执行验证、构建 DMG、生成 SHA-256 与 `latest.json` 并发布。详见 [发布说明](docs/RELEASING.md)。
+推送与 Cargo 版本一致的 `vX.Y.Z` 标签，GitHub Actions 会分别在 macOS 两种架构、Windows 与 Ubuntu 构建，并在 Arch/Wayland 验证安装。所有平台通过后才汇总 SHA-256 与 `latest.json` 并发布。详见 [发布说明](docs/RELEASING.md)。
 
 ## 目录
 

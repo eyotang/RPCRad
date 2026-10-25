@@ -9,6 +9,7 @@ use gpui_kit::component::{
     Disableable, Icon, Sizable,
     button::{Button, ButtonVariants},
     input::{Editor, EditorState, Input, InputEvent, InputState},
+    menu::DropdownMenu,
     resizable::{h_resizable, resizable_panel},
 };
 use gpui_kit::prelude::FluentBuilder;
@@ -42,6 +43,13 @@ const INK: u32 = 0x25312d;
 const MUTED: u32 = 0x7b8580;
 const BORDER: u32 = 0xe4e9e6;
 const SURFACE: u32 = 0xf6f8f7;
+pub fn platform_text(mac: &'static str, other: &'static str) -> &'static str {
+    if cfg!(target_os = "macos") {
+        mac
+    } else {
+        other
+    }
+}
 fn row() -> Div {
     div().flex().items_center()
 }
@@ -848,7 +856,7 @@ impl Workbench {
                             .label(if self.busy {
                                 "停止"
                             } else {
-                                "发送  ⌘ ↵"
+                                platform_text("发送  ⌘ ↵", "发送  Ctrl ↵")
                             })
                             .disabled(self.discovering)
                             .on_click(cx.listener(|this, _, window, cx| this.send(window, cx))),
@@ -977,7 +985,13 @@ impl Render for Workbench {
             .bg(rgb(0xffffff))
             .text_color(rgb(INK))
             .text_size(px(13.))
-            .font_family(".SystemUIFont")
+            .font_family(if cfg!(target_os = "macos") {
+                ".SystemUIFont"
+            } else if cfg!(windows) {
+                "Segoe UI"
+            } else {
+                "Noto Sans"
+            })
             .on_action(cx.listener(|this, _: &Quit, _, cx| {
                 this.save(cx);
                 cx.quit();
@@ -1007,6 +1021,21 @@ impl Render for Workbench {
                             .child("RPCRad"),
                     )
                     .child(div().flex_1())
+                    .when(!cfg!(target_os = "macos"), |s| {
+                        s.child(
+                            Button::new("app-menu")
+                                .ghost()
+                                .label("RPCRad")
+                                .icon(IconName::ChevronDown)
+                                .accessibility_label("RPCRad 菜单")
+                                .dropdown_menu(|menu, _, _| {
+                                    menu.menu("关于 RPCRad…", Box::new(About))
+                                        .menu("检查更新…", Box::new(CheckUpdates))
+                                        .separator()
+                                        .menu("退出 RPCRad", Box::new(Quit))
+                                }),
+                        )
+                    })
                     .when_some(self.available_update.as_ref(), |s, release| {
                         s.child(
                             Button::new("update-banner")
@@ -1022,7 +1051,7 @@ impl Render for Workbench {
                         Button::new("command-search")
                             .ghost()
                             .icon(IconName::Search)
-                            .label("搜索方法   ⌘ K")
+                            .label(platform_text("搜索方法   ⌘ K", "搜索方法   Ctrl K"))
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.search.update(cx, |s, cx| s.focus(window, cx))
                             })),
@@ -1878,7 +1907,10 @@ impl Workbench {
                                             .text_color(rgb(MUTED))
                                             .child("发送请求，在这里查看服务返回的数据"),
                                     )
-                                    .child(badge("⌘ Enter 发送请求")),
+                                    .child(badge(platform_text(
+                                        "⌘ Enter 发送请求",
+                                        "Ctrl Enter 发送请求",
+                                    ))),
                             )
                         },
                     )

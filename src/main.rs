@@ -1,3 +1,4 @@
+#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 extern crate gpui_kit as gpui;
 mod assets;
 mod paths;
@@ -34,10 +35,12 @@ fn main() {
         }
         return;
     }
+    let ui_smoke = std::env::args().any(|arg| arg == "--ui-smoke-test");
     gpui_kit::application()
         .with_assets(assets::Assets)
-        .run(|cx| {
+        .run(move |cx| {
             gpui_kit::init(cx);
+            cx.set_app_identity("dev.rpcrad.desktop", "RPCRad");
             Theme::change(ThemeMode::Light, None, cx);
             let theme = Theme::global_mut(cx);
             theme.colors.primary = rgb(0x128252).into();
@@ -52,12 +55,21 @@ fn main() {
             theme.radius = px(6.);
             theme.shadow = false;
             cx.bind_keys([
-                KeyBinding::new("cmd-q", ui::Quit, None),
-                KeyBinding::new("cmd-enter", ui::Send, None),
-                KeyBinding::new("cmd-k", ui::SearchServices, None),
-                KeyBinding::new("cmd-s", ui::SaveWorkspace, None),
+                KeyBinding::new(ui::platform_text("cmd-q", "ctrl-q"), ui::Quit, None),
+                KeyBinding::new(ui::platform_text("cmd-enter", "ctrl-enter"), ui::Send, None),
+                KeyBinding::new(
+                    ui::platform_text("cmd-k", "ctrl-k"),
+                    ui::SearchServices,
+                    None,
+                ),
+                KeyBinding::new(
+                    ui::platform_text("cmd-s", "ctrl-s"),
+                    ui::SaveWorkspace,
+                    None,
+                ),
             ]);
             cx.on_action(|_: &ui::Quit, cx| cx.quit());
+            #[cfg(target_os = "macos")]
             cx.set_menus([Menu::new("RPCRad").items([
                 MenuItem::action("关于 RPCRad…", ui::About),
                 MenuItem::action("检查更新…", ui::CheckUpdates),
@@ -65,6 +77,7 @@ fn main() {
                 MenuItem::action("退出 RPCRad", ui::Quit),
             ])]);
             let options = WindowOptions {
+                app_id: Some("dev.rpcrad.desktop".into()),
                 window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
                     None,
                     size(px(1440.), px(900.)),
@@ -82,6 +95,23 @@ fn main() {
                 cx.new(|cx| ui::Workbench::new(window, cx))
             }) {
                 Ok((window, workbench)) => {
+                    if ui_smoke {
+                        let _ = window.update(cx, |_, window, _| {
+                            window.on_next_frame(|window, _| {
+                                window.on_next_frame(|_, cx| {
+                                    if let Some(path) = std::env::var_os("RPCRAD_UI_SMOKE_MARKER")
+                                        && let Err(error) =
+                                            std::fs::write(path, "native frames rendered")
+                                    {
+                                        eprintln!("{error}");
+                                        std::process::exit(1);
+                                    }
+                                    println!("PASS: native window rendered");
+                                    cx.quit();
+                                })
+                            });
+                        });
+                    }
                     let about = workbench.downgrade();
                     cx.on_action(move |_: &ui::About, cx| {
                         let _ = about.update(cx, |view, cx| view.show_about(false, cx));
@@ -96,6 +126,9 @@ fn main() {
                 }
                 Err(error) => {
                     eprintln!("无法打开 RPCRad: {error}");
+                    if ui_smoke {
+                        std::process::exit(1);
+                    }
                     cx.quit();
                 }
             }

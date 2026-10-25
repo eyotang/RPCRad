@@ -10,13 +10,33 @@ permissions:
 concurrency:
   group: rpcrad-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/v') }}
-env:
-  CARGO_BUILD_JOBS: 2
-  MACOSX_DEPLOYMENT_TARGET: '14.0'
 jobs:
-  verify:
-    runs-on: macos-15
-    timeout-minutes: 45
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            platform: macos-arm64
+            app: dist/release/RPCRad.app/Contents/MacOS/RPCRad
+          - os: macos-15-intel
+            platform: macos-x64
+            app: dist/release/RPCRad.app/Contents/MacOS/RPCRad
+          - os: windows-2022
+            platform: windows-x64
+            app: dist/windows-x64/RPCRad/RPCRad.exe
+          - os: ubuntu-24.04
+            platform: linux-x64
+            app: dist/linux-x64/RPCRad/rpcrad
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    env:
+      CARGO_BUILD_JOBS: 2
+      MACOSX_DEPLOYMENT_TARGET: '15.0'
+      CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS: '-C target-feature=+crt-static'
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
@@ -29,38 +49,82 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: '3.13'
+      - name: Linux native and packaging dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc g++ clang cmake ninja-build pkg-config libfontconfig-dev libwayland-dev libwebkit2gtk-4.1-dev libxkbcommon-x11-dev libx11-xcb-dev libssl-dev libzstd-dev libasound2-dev libvulkan1 vulkan-validationlayers mesa-vulkan-drivers xvfb xauth fonts-noto-core fonts-noto-cjk xdg-utils xdg-desktop-portal xdg-desktop-portal-gtk zstd
+      - name: Windows installer compiler
+        if: runner.os == 'Windows'
+        run: choco install innosetup --yes --no-progress
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
-      - run: sh tools/setup.sh
+        with:
+          key: release-${{ matrix.platform }}
+          cache-on-failure: true
+      - run: python tools/setup.py
       - run: cargo fmt --all -- --check
-      - run: cargo test --locked
-      - run: cargo clippy --all-targets --all-features --locked -- -D warnings
-      - run: python3 -m unittest discover -s tools/tests
-      - run: cargo build --locked
-      - run: sh tools/smoke.sh
+      - run: python -m unittest discover -s tools/tests
+      - run: cargo test --release --locked
+      - name: Clippy
+        if: matrix.platform == 'macos-arm64'
+        run: cargo clippy --all-targets --all-features --locked -- -D warnings
+      - name: Build native packages
+        run: |
+          version=$(python -c 'import tomllib; print(tomllib.load(open("Cargo.toml","rb"))["package"]["version"])')
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then test "$GITHUB_REF_NAME" = "v$version"; fi
+          python tools/release.py --tag "v$version" --platform '${{ matrix.platform }}'
+      - name: Test relocated native application
+        if: runner.os != 'Linux'
+        run: python tools/smoke.py --app '${{ matrix.app }}' --packaged --gui
+      - name: Test Ubuntu package and X11 rendering
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get install -y ./release-assets/v*/*.deb
+          xvfb-run -a python tools/smoke.py --app /opt/rpcrad/rpcrad --packaged --gui
+      - uses: actions/upload-artifact@v7
+        with:
+          name: packages-${{ matrix.platform }}
+          path: release-assets/v*/*
+          if-no-files-found: error
+          retention-days: 14
+  arch-wayland:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: packages-linux-x64
+          path: arch-packages
+      - name: Install Arch package and verify Wayland rendering
+        run: |
+          docker run --rm -v "$PWD:/work" -w /work archlinux:base-devel bash -euc '
+            pacman -Syu --noconfirm --needed python go git fontconfig freetype2 libxkbcommon libxkbcommon-x11 libxcb libx11 wayland vulkan-icd-loader vulkan-swrast alsa-lib openssl zstd xdg-utils xdg-desktop-portal xdg-desktop-portal-gtk noto-fonts noto-fonts-cjk weston dbus
+            pacman -U --noconfirm arch-packages/*.pkg.tar.zst
+            python tools/setup.py
+            python tools/wayland-smoke.py
+          '
   publish:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: verify
-    runs-on: macos-15
-    timeout-minutes: 60
+    needs: [build, arch-wayland]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: tools/demo/go.mod
-          cache-dependency-path: tools/demo/go.sum
       - uses: actions/setup-python@v7
         with:
           python-version: '3.13'
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
-      - run: sh tools/setup.sh
-      - name: Build DMG and compatible latest.json
-        run: python3 tools/release.py --tag "$GITHUB_REF_NAME"
-      - name: Test packaged application
-        run: sh tools/smoke.sh dist/release/RPCRad.app/Contents/MacOS/RPCRad
-      - name: Upload all assets before publishing
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: packages-*
+          merge-multiple: true
+          path: release-assets/${{ github.ref_name }}
+      - name: Validate every platform before publishing the update manifest
+        run: python tools/release.py --tag "$GITHUB_REF_NAME" --manifest-only
+      - name: Upload complete release then publish
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

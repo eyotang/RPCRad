@@ -3,7 +3,7 @@ set -eu
 cd "$(dirname "$0")/.."
 mode="${1:-debug}"
 case "$mode" in debug|release) ;; *) echo 'Usage: tools/package.sh [debug|release]' >&2; exit 1;; esac
-export MACOSX_DEPLOYMENT_TARGET=14.0
+export MACOSX_DEPLOYMENT_TARGET=15.0
 sh tools/icons.sh
 if [ "$mode" = release ]; then cargo build --release --locked; else cargo build --locked; fi
 version=$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["package"]["version"])')
@@ -21,7 +21,7 @@ app, version = sys.argv[1:]
 values = dict(CFBundleName="RPCRad", CFBundleDisplayName="RPCRad", CFBundleIdentifier="dev.rpcrad.desktop",
     CFBundleExecutable="RPCRad", CFBundleIconFile="RPCRad.icns", CFBundlePackageType="APPL",
     CFBundleShortVersionString=version, CFBundleVersion=version, NSHighResolutionCapable=True,
-    LSMinimumSystemVersion="14.0", NSHumanReadableCopyright="Copyright © 2026 eyotang")
+    LSMinimumSystemVersion="15.0", NSHumanReadableCopyright="Copyright © 2026 eyotang")
 Path(app,"Contents/Info.plist").write_bytes(plistlib.dumps(values))
 PY
 if [ "$mode" = release ]; then python3 tools/collect-licenses.py "$app/Contents/Resources/licenses"; fi
