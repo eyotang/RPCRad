@@ -44,7 +44,7 @@ jobs:
           components: rustfmt, clippy
       - uses: actions/setup-go@v7
         with:
-          go-version-file: tools/demo/go.mod
+          go-version-file: .go-version
           cache-dependency-path: tools/demo/go.sum
       - uses: actions/setup-python@v7
         with:
@@ -86,6 +86,12 @@ jobs:
       - name: Test Windows installation and uninstall
         if: runner.os == 'Windows'
         run: python tools/windows-install-smoke.py
+      - name: Repeat Windows streaming and native runtime checks
+        if: runner.os == 'Windows'
+        run: |
+          for attempt in 1 2; do
+            python tools/smoke.py --app '${{ matrix.app }}' --packaged --gui
+          done
       - uses: actions/upload-artifact@v7
         with:
           name: packages-${{ matrix.platform }}
@@ -94,6 +100,7 @@ jobs:
           retention-days: 14
   arch-wayland:
     needs: build
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
