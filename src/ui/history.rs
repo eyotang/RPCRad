@@ -100,6 +100,28 @@ impl HistoryEntry {
     }
 }
 impl Workbench {
+    pub(super) fn clear_history(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.history.clear();
+        self.history_detail = None;
+        self.history_revealed.clear();
+        self.history_editor
+            .update(cx, |state, cx| state.set_value("", window, cx));
+        self.notice = "历史记录已清空".into();
+        cx.notify();
+    }
+    pub(super) fn clear_history_button(&self, id: &'static str, cx: &mut Context<Self>) -> Button {
+        Button::new(id)
+            .ghost()
+            .small()
+            .icon(IconName::Trash)
+            .accessibility_label("清空历史记录")
+            .tooltip("清空历史记录")
+            .disabled(self.history.is_empty())
+            .on_click(cx.listener(|this, _, window, cx| {
+                cx.stop_propagation();
+                this.clear_history(window, cx);
+            }))
+    }
     pub(super) fn open_history(
         &mut self,
         index: usize,

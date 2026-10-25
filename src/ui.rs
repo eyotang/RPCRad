@@ -905,6 +905,7 @@ impl Workbench {
                                         .unwrap_or_else(|| "尚无调用".into()),
                                 ),
                             )
+                            .child(self.clear_history_button("clear-history-drawer", cx))
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.history_open = !this.history_open;
                                 cx.notify();
@@ -1242,12 +1243,14 @@ impl Workbench {
             .gap_1();
         if self.history_mode {
             tree = tree.child(
-                div()
+                row()
                     .px_2()
                     .py_3()
                     .text_color(rgb(MUTED))
                     .text_xs()
-                    .child("本次会话"),
+                    .child("本次会话")
+                    .child(div().flex_1())
+                    .child(self.clear_history_button("clear-history-sidebar", cx)),
             );
             if self.history.is_empty() {
                 tree = tree.child(

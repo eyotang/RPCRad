@@ -34,6 +34,7 @@ tools/bin/rpcrad-demo
 - Metadata、Bearer token、TLS 系统 CA 验证。
 - 本地请求头插件：MD5 AppID + 毫秒时间戳签名、HMAC-SHA256 和 AES-256-GCM 示例，参数配置、密钥输入与头部预览。
 - 响应正文、Headers、Trailers、复制、会话调用历史与请求重载。
+- 左侧历史和底部调用记录旁的垃圾桶图标可一键清空记录，不打断正在进行的请求。
 - 点击底部调用记录或左侧历史，查看当次请求详情：插件处理前/最终请求头、请求体、响应和连接设置；支持显示头部值、复制及只读查看。
 - 请求草稿、服务定义、连接设置、收藏自动保存到 `~/Library/Application Support/RPCRad/workspace.json`。从原项目源码构建的新版会在首次启动时读取该项目的旧工作区；下载的发行版无法定位任意位置的旧源码目录。
 
