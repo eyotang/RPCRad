@@ -55,7 +55,7 @@ Linux 工作区：`${XDG_DATA_HOME:-~/.local/share}/RPCRad/workspace.json`。所
 
 ## 从源码构建
 
-所有系统先安装 Rust stable、Go 1.21+ 和 Python 3.11+，运行 `python tools/setup.py`。脚本按 `.go-version` 固定使用 Go 1.27.3 构建 grpcurl 和示例服务，必要时由 Go 自动下载对应工具链。macOS 需 Xcode Command Line Tools；Windows 需 Visual Studio 2022 C++ Build Tools、Windows SDK、CMake，使用 MSVC 工具链；Ubuntu 的原生依赖清单位于 `.github/workflows/ci.yml`。
+所有系统先安装 Rust stable、Go 1.21+ 和 Python 3.11+，运行 `python tools/setup.py`。脚本按 `.go-version` 固定使用 Go 1.26.10 构建 grpcurl 和示例服务，必要时由 Go 自动下载对应工具链。macOS 需 Xcode Command Line Tools；Windows 需 Visual Studio 2022 C++ Build Tools、Windows SDK、CMake，使用 MSVC 工具链；Ubuntu 的原生依赖清单位于 `.github/workflows/ci.yml`。
 
 ```sh
 cargo run --locked

@@ -1,8 +1,8 @@
 # Third-party notices
 
-RPCRad uses GPUI and GPUI-KIT (Apache-2.0), grpcurl (MIT), Rhai (MIT/Apache-2.0), RustCrypto libraries and other open-source dependencies. Release bundles include dependency metadata and available upstream license texts in `RPCRad.app/Contents/Resources/licenses`.
+RPCRad uses GPUI and GPUI-KIT (Apache-2.0), grpcurl (MIT), Rhai (MIT/Apache-2.0), RustCrypto libraries and other open-source dependencies. Release bundles include dependency metadata and available upstream license texts in `RPCRad.app/Contents/Resources/licenses` (macOS) or `resources/licenses` (Windows/Linux). The Go runtime and standard library BSD license is included as `go-standard-library-LICENSE`.
 
-The update flow and stable-version validation are adapted from [Metra](https://github.com/eyotang/Metra), Copyright (c) 2026 eyotang, under the MIT License. RPCRad retains its GPUI interface. The macOS flow checks a GitHub `latest.json` manifest and opens the corresponding release page; it does not use Metra's Windows installer or signing key.
+The update flow and stable-version validation are adapted from [Metra](https://github.com/eyotang/Metra), Copyright (c) 2026 eyotang, under the MIT License. RPCRad retains its GPUI interface. The update flow checks a GitHub `latest.json` manifest and opens the corresponding release page; it does not use Metra's Windows installer or signing key.
 
 Metra MIT License:
 

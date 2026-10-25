@@ -11,7 +11,8 @@ def main():
     binary.mkdir(parents=True, exist_ok=True)
     env = os.environ.copy()
     env.update(GOBIN=str(binary), GOPATH=str(ROOT/'.cache/go'), GOCACHE=str(ROOT/'.cache/go-build'))
-    # Use the same supported runtime for grpcurl and fixtures on every build host.
+    # Keep the supported Go 1.26 line: grpcurl 1.9.3 passes nil to json.NewDecoder,
+    # which panics with Go 1.27's default JSON v2 implementation.
     env['GOTOOLCHAIN'] = 'go' + (ROOT/'.go-version').read_text(encoding='utf-8').strip()
     subprocess.run(['go', 'install', 'github.com/fullstorydev/grpcurl/cmd/grpcurl@v1.9.3'], env=env, cwd=ROOT, check=True)
     suffix = '.exe' if os.name == 'nt' else ''

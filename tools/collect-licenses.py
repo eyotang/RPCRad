@@ -35,6 +35,9 @@ for package in metadata["packages"]:
 env = os.environ.copy()
 env["GOPATH"] = str(root/".cache/go")
 env["GOCACHE"] = str(root/".cache/go-build")
+env["GOTOOLCHAIN"] = "go" + (root/".go-version").read_text(encoding="utf-8").strip()
+goroot = Path(subprocess.check_output(["go", "env", "GOROOT"], env=env, text=True).strip())
+copy_license(goroot/"LICENSE", out/"go-standard-library-LICENSE")
 # Read the exact modules linked into grpcurl; avoid unrelated upstream test dependencies.
 info = subprocess.check_output(["go", "version", "-m", str(root/"tools/bin"/("grpcurl.exe" if os.name == "nt" else "grpcurl"))], env=env).decode()
 def escaped(value):
