@@ -174,5 +174,11 @@ jobs:
           else
             gh release create "$tag" --verify-tag --draft --title "RPCRad ${tag#v}" --notes-file "docs/releases/$tag.md"
           fi
-          gh release upload "$tag" "release-assets/$tag/"* --clobber
+          assets=("release-assets/$tag/"*)
+          for i in "${!assets[@]}"; do
+            case "${assets[i]}" in
+              *.pkg.tar.zst) assets[i]="${assets[i]}#Omarchy / Arch Linux x64 — 安装包 (.pkg.tar.zst)" ;;
+            esac
+          done
+          gh release upload "$tag" "${assets[@]}" --clobber
           gh release edit "$tag" --draft=false --latest

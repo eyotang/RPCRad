@@ -7,7 +7,7 @@
 1. 修改 Cargo.toml 与 Cargo.lock 版本，添加 `docs/releases/vX.Y.Z.md`。
 2. 本地执行 `cargo fmt --all -- --check`、`cargo test --locked`、Clippy、`python -m unittest discover -s tools/tests`。
 3. 提交 main。工作流在 Apple Silicon、Intel Mac、Windows x64、Ubuntu x64 原生构建安装包，测试被移动到新目录后的包，验证真实请求、签名、原生窗口帧；Windows 安装器还会实际安装、运行和卸载；另在 Arch 容器安装包并测试 Wayland。
-4. 创建并推送与版本严格匹配的标签。所有平台与 Arch 验证通过后，汇总七种包及各自 SHA-256，检查没有遗漏或意外文件，再生成兼容旧客户端的 latest.json，先上传到草稿，再公开发布为 latest。
+4. 创建并推送与版本严格匹配的标签。所有平台与 Arch 验证通过后，汇总七种包及各自 SHA-256，检查没有遗漏或意外文件，再生成兼容旧客户端的 latest.json，先上传到草稿，再公开发布为 latest。Omarchy / Arch 的安装包在上传时自动标注平台名称，实际文件名与更新清单保持一致。
 
 `.dmg`（arm64/x64）、Windows `.exe` 安装器及 `.zip`、Linux `.tar.gz`、Ubuntu `.deb`、Arch `.pkg.tar.zst`。不能只上传某个平台就更新 latest。公开版本不能覆写；修复递增版本。失败停在草稿阶段可以重跑。
 

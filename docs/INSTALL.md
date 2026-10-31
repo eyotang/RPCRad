@@ -37,7 +37,7 @@ sudo apt install ./rpcrad_版本_amd64.deb
 
 ## Omarchy / Arch Linux x64
 
-当前版本：[下载 RPCRad 0.3.0 安装包](https://github.com/eyotang/RPCRad/releases/download/v0.3.0/rpcrad-0.3.0-1-x86_64.pkg.tar.zst) · [SHA-256 校验文件](https://github.com/eyotang/RPCRad/releases/download/v0.3.0/rpcrad-0.3.0-1-x86_64.pkg.tar.zst.sha256)。
+当前版本：[下载 RPCRad 0.3.1 安装包](https://github.com/eyotang/RPCRad/releases/download/v0.3.1/rpcrad-0.3.1-1-x86_64.pkg.tar.zst) · [SHA-256 校验文件](https://github.com/eyotang/RPCRad/releases/download/v0.3.1/rpcrad-0.3.1-1-x86_64.pkg.tar.zst.sha256)。
 
 [Omarchy](https://omarchy.org/) 使用 Arch Linux 和 Hyprland。下载 `.pkg.tar.zst` 后用 pacman 安装（不要使用 Ubuntu 的 deb）：
 
@@ -61,7 +61,7 @@ Linux 工作区：`${XDG_DATA_HOME:-~/.local/share}/RPCRad/workspace.json`。所
 
 ```sh
 cargo run --locked
-python tools/release.py --tag v0.3.0
+python tools/release.py --tag v0.3.1
 ```
 
-发布脚本在当前平台原生构建：Mac 使用 `hdiutil`，Windows 安装器需要 Inno Setup 6，Linux 包需要 `dpkg-deb`、`tar` 与 `zstd`。生成最终更新清单时必须集齐所有平台包：`python tools/release.py --tag v0.3.0 --manifest-only`。
+发布脚本在当前平台原生构建：Mac 使用 `hdiutil`，Windows 安装器需要 Inno Setup 6，Linux 包需要 `dpkg-deb`、`tar` 与 `zstd`。生成最终更新清单时必须集齐所有平台包：`python tools/release.py --tag v0.3.1 --manifest-only`。
