@@ -37,6 +37,8 @@ sudo apt install ./rpcrad_版本_amd64.deb
 
 ## Omarchy / Arch Linux x64
 
+当前版本：[下载 RPCRad 0.3.0 安装包](https://github.com/eyotang/RPCRad/releases/download/v0.3.0/rpcrad-0.3.0-1-x86_64.pkg.tar.zst) · [SHA-256 校验文件](https://github.com/eyotang/RPCRad/releases/download/v0.3.0/rpcrad-0.3.0-1-x86_64.pkg.tar.zst.sha256)。
+
 [Omarchy](https://omarchy.org/) 使用 Arch Linux 和 Hyprland。下载 `.pkg.tar.zst` 后用 pacman 安装（不要使用 Ubuntu 的 deb）：
 
 ```sh
