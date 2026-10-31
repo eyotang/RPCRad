@@ -26,3 +26,15 @@
 原生 UI smoke test 等待实际绘制两帧后才成功；CLI 成功不作为 UI 成功的替代。Linux 的 CI 覆盖 Ubuntu/X11 和 Arch/Wayland。Omarchy 的 Hyprland 日常桌面、不同显卡与显示缩放仍需用户设备验证。Windows / Linux ARM64 暂无构建。
 
 目前 macOS ad-hoc 签名且未公证，Windows 安装器未 Authenticode 签名。macOS 的按需 xattr 命令在 [安装说明](INSTALL.md) 中；程序、安装器和构建脚本不会自动清除用户应用隔离属性或关闭安全保护。
+
+## 重跑已有标签的完整发布验证
+
+若失败来自 CI 环境或验证脚本，且应用代码不需要变化，可在主分支修正工作流，再执行：
+
+```sh
+gh workflow run ci.yml --ref main -f release_tag=vX.Y.Z
+```
+
+此模式使用主分支的工作流定义，但每个任务检出的应用代码、测试脚本和发布说明都来自指定标签；构建步骤校验标签与 Cargo 版本一致。四个平台及 Arch/Wayland 检查全部通过后才能发布。标签保持不变；已经公开的版本不能覆盖。不要与 `reuse_run` 同时使用。
+
+CI 显式启用 Python UTF-8 模式，避免 Windows 的默认日志编码拒绝中文测试输出。

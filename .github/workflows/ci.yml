@@ -6,10 +6,16 @@ on:
   pull_request:
   workflow_dispatch:
     inputs:
+      release_tag:
+        description: 'Optional: rebuild and publish an existing vX.Y.Z tag using the current verification workflow'
+        type: string
+        required: false
       reuse_run:
         description: 'Optional: recheck a release-tag run with successful native builds; only verification/docs changes allowed'
         type: string
         required: false
+env:
+  PYTHONUTF8: '1'
 permissions:
   contents: read
 concurrency:
@@ -38,6 +44,7 @@ jobs:
     timeout-minutes: 60
     env:
       CARGO_BUILD_JOBS: 2
+      REQUESTED_TAG: ${{ inputs.release_tag }}
       MACOSX_DEPLOYMENT_TARGET: '15.0'
       CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS: '-C target-feature=+crt-static'
     defaults:
@@ -45,6 +52,8 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.release_tag && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
@@ -79,6 +88,10 @@ jobs:
         run: |
           version=$(python -c 'import tomllib; print(tomllib.load(open("Cargo.toml","rb"))["package"]["version"])')
           if [[ "$GITHUB_REF" == refs/tags/* ]]; then test "$GITHUB_REF_NAME" = "v$version"; fi
+          if [[ -n "$REQUESTED_TAG" ]]; then
+            test "$REQUESTED_TAG" = "v$version"
+            test "$(git rev-parse HEAD)" = "$(git rev-parse "refs/tags/$REQUESTED_TAG^{commit}")"
+          fi
           python tools/release.py --tag "v$version" --platform '${{ matrix.platform }}'
           echo "assets=release-assets/v$version" >> "$GITHUB_OUTPUT"
       - name: Test relocated native application
@@ -119,6 +132,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          ref: ${{ inputs.release_tag && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
       - name: Validate native artifact source
         id: source
         env:
@@ -141,7 +155,7 @@ jobs:
             xvfb-run -a python tools/wayland-smoke.py
           '
   publish:
-    if: ${{ !cancelled() && needs['arch-wayland'].result == 'success' && ((startsWith(github.ref, 'refs/tags/v') && needs.build.result == 'success') || (github.event_name == 'workflow_dispatch' && inputs.reuse_run != '')) }}
+    if: ${{ !cancelled() && needs['arch-wayland'].result == 'success' && (((startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')) && needs.build.result == 'success') || (github.event_name == 'workflow_dispatch' && inputs.reuse_run != '')) }}
     needs: [build, arch-wayland]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -152,6 +166,8 @@ jobs:
       RELEASE_TAG: ${{ needs['arch-wayland'].outputs.tag }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.release_tag && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
       - uses: actions/setup-python@v7
         with:
           python-version: '3.13'

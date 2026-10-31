@@ -37,7 +37,7 @@ def run(app, gui, data):
                 raise RuntimeError(f'Native UI failed: {result.returncode}\n{result.stdout}\n{result.stderr}')
             if marker.read_text(encoding='utf-8') != f'native frames rendered: {label}':
                 raise RuntimeError('Native UI used the wrong language')
-            print(f'PASS: native UI rendered {label}; switching and persistence verified')
+            print(f'PASS: native UI rendered {code or "saved language"}; switching and persistence verified')
 
 def main():
     parser = argparse.ArgumentParser()
