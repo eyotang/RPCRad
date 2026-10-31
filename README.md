@@ -13,7 +13,7 @@
 | macOS 15+ | Apple Silicon / Intel | 各自独立的 `.dmg` |
 | Windows 10/11 | x64 | `-setup.exe` 安装器、便携 `.zip` |
 | Ubuntu 24.04+ | x64 | `.deb`、便携 `.tar.gz` |
-| Omarchy / Arch Linux | x64 | [下载 0.6.0 pacman 安装包](https://github.com/eyotang/RPCRad/releases/download/v0.6.0/rpcrad-0.6.0-1-x86_64.pkg.tar.zst)，原生 Wayland 与 X11 |
+| Omarchy / Arch Linux | x64 | [下载 0.6.1 pacman 安装包](https://github.com/eyotang/RPCRad/releases/download/v0.6.1/rpcrad-0.6.1-1-x86_64.pkg.tar.zst)，原生 Wayland 与 X11 |
 
 所有包包含 grpcurl、示例 Proto 和依赖许可证，不需要安装 Rust 或 Go。Windows 安装器创建开始菜单入口并支持卸载；Linux 系统包安装应用菜单和图标。安装步骤、依赖与 macOS `xattr` 命令见 [安装说明](docs/INSTALL.md)。
 
@@ -107,7 +107,7 @@ tools/bin/rpcrad-demo
 python tools/setup.py
 cargo run --locked
 # 在当前系统构建对应发布包
-python tools/release.py --tag v0.6.0
+python tools/release.py --tag v0.6.1
 ```
 
 首次构建通过 Cargo / Go 下载公开依赖；调试无需账号或云服务。启动时会向 GitHub 检查版本，不上传请求内容。示例服务只监听 127.0.0.1。
