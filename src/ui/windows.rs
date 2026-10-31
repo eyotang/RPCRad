@@ -111,26 +111,36 @@ impl UtilityWindow {
             .upgrade()
             .map(|view| view.read(cx).appearance)
             .unwrap_or_default();
+        let preference = self
+            .workbench
+            .upgrade()
+            .map(|view| view.read(cx).language)
+            .unwrap_or_default();
         let languages = Button::new("language-selector")
             .w(px(180.))
             .flex_shrink_0()
-            .label(Language::current().label())
+            .label(preference.label())
             .icon(IconName::ChevronDown)
             .accessibility_label(tr!("Language"))
             .dropdown_menu(move |mut menu, _, _| {
-                for language in Language::ALL {
+                for language in std::iter::once(LanguagePreference::Automatic)
+                    .chain(Language::ALL.map(LanguagePreference::Fixed))
+                {
                     let target = workbench.clone();
                     menu = menu.item(
-                        PopupMenuItem::new(language.label())
-                            .checked(Language::current() == language)
-                            .on_click(move |_, _, cx| {
-                                // Input entities belong to the request window, not this settings window.
-                                let _ = main_window.update(cx, |_, window, cx| {
-                                    let _ = target.update(cx, |view, cx| {
-                                        view.set_language(language, window, cx)
-                                    });
-                                });
-                            }),
+                        PopupMenuItem::new(if language == LanguagePreference::Automatic {
+                            tr!("Automatic (system)")
+                        } else {
+                            language.label()
+                        })
+                        .checked(preference == language)
+                        .on_click(move |_, _, cx| {
+                            // Input entities belong to the request window, not this settings window.
+                            let _ = main_window.update(cx, |_, window, cx| {
+                                let _ = target
+                                    .update(cx, |view, cx| view.set_language(language, window, cx));
+                            });
+                        }),
                     );
                 }
                 menu
@@ -160,7 +170,18 @@ impl UtilityWindow {
                             .font_weight(FontWeight::SEMIBOLD)
                             .child(tr!("Language")),
                     )
-                    .child(row().child(languages)),
+                    .child(row().child(languages))
+                    .when(preference == LanguagePreference::Automatic, |panel| {
+                        panel.child(
+                            row()
+                                .flex_wrap()
+                                .gap_2()
+                                .text_xs()
+                                .text_color(color(MUTED, cx))
+                                .child(tr!("Current language"))
+                                .child(Language::current().label()),
+                        )
+                    }),
             )
             .child(
                 column()

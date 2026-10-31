@@ -1,6 +1,6 @@
 mod environments;
 mod language;
-use crate::i18n::Language;
+use crate::i18n::{Language, LanguagePreference};
 use language::{localized_editor, localized_input, mask_button};
 mod headers;
 use environments::EnvironmentUi;
@@ -114,7 +114,7 @@ fn tab(
 #[derive(Clone, Default, Serialize, Deserialize)]
 struct Saved {
     #[serde(default)]
-    language: Language,
+    language: LanguagePreference,
     #[serde(default)]
     appearance: Appearance,
     endpoint: String,
@@ -132,6 +132,7 @@ struct Saved {
 }
 
 pub struct Workbench {
+    language: LanguagePreference,
     environments: EnvironmentUi,
     environments_open: bool,
     appearance: Appearance,
@@ -185,7 +186,11 @@ fn example_protos() -> Vec<PathBuf> {
 }
 
 impl Workbench {
-    pub fn new(language: Option<Language>, window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub fn new(
+        language: Option<LanguagePreference>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
         let saved = std::fs::read(state_path())
             .or_else(|error| {
                 if error.kind() == std::io::ErrorKind::NotFound {
@@ -197,7 +202,8 @@ impl Workbench {
             .ok()
             .and_then(|data| serde_json::from_slice::<Saved>(&data).ok())
             .unwrap_or_default();
-        language.unwrap_or(saved.language).activate();
+        let language = language.unwrap_or(saved.language);
+        language.resolve().activate();
         crate::install_menus(cx);
         saved.appearance.apply(window, cx);
         let protos = if saved.protos.is_empty() && saved.methods.is_empty() {
@@ -345,6 +351,7 @@ impl Workbench {
         let plugins = PluginUi::new(saved.plugin, window, cx);
         let environments = EnvironmentUi::new(saved.variables, window, cx);
         let mut state = Self {
+            language,
             environments,
             environments_open: false,
             plugins,
@@ -402,7 +409,7 @@ impl Workbench {
                 .insert(method.path(), self.request.read(cx).value().to_string());
         }
         let saved = Saved {
-            language: Language::current(),
+            language: self.language,
             appearance: self.appearance,
             endpoint: self.endpoint.read(cx).value().to_string(),
             tls: self.tls,

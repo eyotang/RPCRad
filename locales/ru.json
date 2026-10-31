@@ -284,5 +284,8 @@
   "Appearance": "Тема",
   "Changes apply immediately and are saved automatically.": "Изменения применяются сразу и сохраняются автоматически.",
   "Close": "Закрыть",
-  "Connection": "Соединение"
+  "Connection": "Соединение",
+  "Automatic": "Автоопределение",
+  "Automatic (system)": "Автоматически (система)",
+  "Current language": "Текущий язык"
 }

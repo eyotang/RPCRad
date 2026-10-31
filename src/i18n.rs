@@ -24,6 +24,65 @@ pub enum Language {
 
 static LANGUAGE: AtomicU8 = AtomicU8::new(0);
 
+// Persist the user's choice, not the language detected on this particular machine.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(from = "String", into = "String")]
+pub enum LanguagePreference {
+    #[default]
+    Automatic,
+    Fixed(Language),
+}
+
+impl LanguagePreference {
+    pub fn from_code(code: &str) -> Option<Self> {
+        if code == "auto" {
+            Some(Self::Automatic)
+        } else {
+            Language::from_code(code).map(Self::Fixed)
+        }
+    }
+
+    pub fn resolve(self) -> Language {
+        match self {
+            Self::Fixed(language) => language,
+            Self::Automatic => self.resolve_locales(sys_locale::get_locales()),
+        }
+    }
+
+    fn resolve_locales(self, locales: impl IntoIterator<Item = impl AsRef<str>>) -> Language {
+        match self {
+            Self::Fixed(language) => language,
+            Self::Automatic => locales
+                .into_iter()
+                .find_map(|locale| Language::from_locale(locale.as_ref()))
+                .unwrap_or(Language::English),
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Automatic => Language::current().message("Automatic"),
+            Self::Fixed(language) => language.label(),
+        }
+    }
+}
+
+impl From<String> for LanguagePreference {
+    fn from(code: String) -> Self {
+        Self::from_code(&code).unwrap_or_default()
+    }
+}
+
+impl From<LanguagePreference> for String {
+    fn from(preference: LanguagePreference) -> Self {
+        match preference {
+            LanguagePreference::Automatic => "auto",
+            LanguagePreference::Fixed(language) => language.code(),
+        }
+        .into()
+    }
+}
+
 impl Language {
     pub const ALL: [Self; 7] = [
         Self::Chinese,
@@ -45,6 +104,19 @@ impl Language {
         Self::ALL
             .into_iter()
             .find(|language| language.code() == code)
+    }
+    fn from_locale(locale: &str) -> Option<Self> {
+        let primary = locale.trim().split(['-', '_', '.', '@']).next()?;
+        match primary.to_ascii_lowercase().as_str() {
+            "zh" => Some(Self::Chinese),
+            "en" => Some(Self::English),
+            "ja" => Some(Self::Japanese),
+            "ko" => Some(Self::Korean),
+            "fr" => Some(Self::French),
+            "de" => Some(Self::German),
+            "ru" => Some(Self::Russian),
+            _ => None,
+        }
     }
     pub fn code(self) -> &'static str {
         match self {
@@ -95,6 +167,72 @@ include!(concat!(env!("OUT_DIR"), "/translations.rs"));
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn automatic_language_matches_regions_scripts_and_posix_locales() {
+        for (locale, language) in [
+            ("zh-Hans-CN", Language::Chinese),
+            ("zh_TW.UTF-8", Language::Chinese),
+            ("en-GB", Language::English),
+            ("ja-JP", Language::Japanese),
+            ("ko_KR.UTF-8", Language::Korean),
+            ("fr-CA", Language::French),
+            ("de_DE.UTF-8@euro", Language::German),
+            (" RU-ru ", Language::Russian),
+        ] {
+            assert_eq!(
+                LanguagePreference::Automatic.resolve_locales([locale]),
+                language,
+                "{locale}"
+            );
+        }
+    }
+
+    #[test]
+    fn automatic_language_uses_first_supported_preference_or_english() {
+        let automatic = LanguagePreference::Automatic;
+        assert_eq!(
+            automatic.resolve_locales(["es-ES", "ja-JP", "en-US"]),
+            Language::Japanese
+        );
+        assert_eq!(
+            automatic.resolve_locales(["en-US", "ja-JP"]),
+            Language::English
+        );
+        assert_eq!(
+            automatic.resolve_locales(["", "C", "POSIX", "C.UTF-8", "it-IT"]),
+            Language::English
+        );
+        assert_eq!(
+            automatic.resolve_locales(std::iter::empty::<&str>()),
+            Language::English
+        );
+    }
+
+    #[test]
+    fn manual_language_wins_over_system_preferences() {
+        assert_eq!(
+            LanguagePreference::Fixed(Language::French).resolve_locales(["zh-CN", "en-US"]),
+            Language::French
+        );
+    }
+
+    #[test]
+    fn stored_automatic_and_existing_manual_choices_roundtrip() {
+        for (code, expected) in std::iter::once(("auto", LanguagePreference::Automatic)).chain(
+            Language::ALL.map(|language| (language.code(), LanguagePreference::Fixed(language))),
+        ) {
+            let value = format!("\"{code}\"");
+            let preference = serde_json::from_str::<LanguagePreference>(&value).unwrap();
+            assert_eq!(preference, expected);
+            assert_eq!(serde_json::to_string(&preference).unwrap(), value);
+        }
+        assert_eq!(
+            serde_json::from_str::<LanguagePreference>("\"es\"").unwrap(),
+            LanguagePreference::Automatic
+        );
+        assert_eq!(LanguagePreference::from_code("typo"), None);
+    }
+
     #[test]
     fn all_language_preferences_round_trip_and_unknown_values_fall_back() {
         for language in Language::ALL {

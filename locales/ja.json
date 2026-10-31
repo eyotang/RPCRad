@@ -284,5 +284,8 @@
   "Appearance": "テーマ",
   "Changes apply immediately and are saved automatically.": "変更はすぐに反映され、自動保存されます。",
   "Close": "閉じる",
-  "Connection": "接続"
+  "Connection": "接続",
+  "Automatic": "自動検出",
+  "Automatic (system)": "自動検出（システム）",
+  "Current language": "現在の言語"
 }

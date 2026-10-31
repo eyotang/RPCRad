@@ -76,6 +76,7 @@ impl Workbench {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> anyhow::Result<()> {
+        let preference = self.language;
         let language = Language::current();
         let body = self.request.read(cx).value();
         let metadata = self.metadata.read(cx).value();
@@ -84,13 +85,22 @@ impl Workbench {
         let settings = serde_json::to_value(self.plugins.settings(cx))?;
         self.set_language(
             match language {
-                Language::Chinese => Language::English,
-                _ => Language::Chinese,
+                Language::Chinese => LanguagePreference::Fixed(Language::English),
+                _ => LanguagePreference::Fixed(Language::Chinese),
             },
             window,
             cx,
         );
-        self.set_language(language, window, cx);
+        self.set_language(LanguagePreference::Automatic, window, cx);
+        anyhow::ensure!(
+            self.language == LanguagePreference::Automatic,
+            "Automatic choice was not retained"
+        );
+        anyhow::ensure!(
+            Language::current() == LanguagePreference::Automatic.resolve(),
+            "System language was not resolved"
+        );
+        self.set_language(preference, window, cx);
         anyhow::ensure!(
             self.request.read(cx).value() == body,
             "Language switch changed request data"
@@ -113,7 +123,7 @@ impl Workbench {
         );
         let saved: Saved = serde_json::from_slice(&std::fs::read(state_path())?)?;
         anyhow::ensure!(
-            saved.language == language,
+            saved.language == preference,
             "Language preference was not saved"
         );
         println!("PASS: language switching preserves request data and saves the preference");
@@ -122,13 +132,15 @@ impl Workbench {
 
     pub(super) fn set_language(
         &mut self,
-        language: Language,
+        preference: LanguagePreference,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if language == Language::current() {
+        let language = preference.resolve();
+        if self.language == preference && language == Language::current() {
             return;
         }
+        self.language = preference;
         language.activate();
         crate::install_menus(cx);
         self.search.update(cx, |s, cx| {
@@ -153,19 +165,19 @@ impl Workbench {
 #[cfg(test)]
 mod tests {
     use super::Saved;
-    use crate::i18n::Language;
+    use crate::i18n::{Language, LanguagePreference};
 
     #[test]
-    fn old_workspaces_keep_data_and_default_to_chinese() {
+    fn old_workspaces_keep_data_and_default_to_automatic_language() {
         let mut saved = serde_json::to_value(Saved::default()).unwrap();
         saved.as_object_mut().unwrap().remove("language");
         saved.as_object_mut().unwrap().remove("appearance");
         saved["endpoint"] = "{{endpoint}}".into();
         saved["drafts"] = serde_json::json!({"demo/Call": "{\"name\":\"中文 {{name}}\"}"});
         let mut restored: Saved = serde_json::from_value(saved.clone()).unwrap();
-        assert_eq!(restored.language, Language::Chinese);
+        assert_eq!(restored.language, LanguagePreference::Automatic);
         assert_eq!(restored.appearance, crate::theme::Appearance::System);
-        restored.language = Language::English;
+        restored.language = LanguagePreference::Fixed(Language::English);
         let roundtrip = serde_json::to_value(&restored).unwrap();
         assert_eq!(roundtrip["language"], "en");
         assert_eq!(roundtrip["endpoint"], saved["endpoint"]);

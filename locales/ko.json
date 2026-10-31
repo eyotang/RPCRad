@@ -284,5 +284,8 @@
   "Appearance": "테마",
   "Changes apply immediately and are saved automatically.": "변경 사항은 즉시 적용되며 자동으로 저장됩니다.",
   "Close": "닫기",
-  "Connection": "연결"
+  "Connection": "연결",
+  "Automatic": "자동 감지",
+  "Automatic (system)": "자동 감지 (시스템)",
+  "Current language": "현재 언어"
 }

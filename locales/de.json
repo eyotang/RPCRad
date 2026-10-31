@@ -284,5 +284,8 @@
   "Appearance": "Design",
   "Changes apply immediately and are saved automatically.": "Änderungen werden sofort angewendet und automatisch gespeichert.",
   "Close": "Schließen",
-  "Connection": "Verbindung"
+  "Connection": "Verbindung",
+  "Automatic": "Automatisch",
+  "Automatic (system)": "Automatisch (System)",
+  "Current language": "Aktuelle Sprache"
 }

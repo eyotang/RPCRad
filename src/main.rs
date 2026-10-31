@@ -16,12 +16,12 @@ fn main() {
     let language =
         std::env::args().find_map(|arg| arg.strip_prefix("--language=").map(str::to_owned));
     let language = language.map(|code| {
-        i18n::Language::from_code(&code).unwrap_or_else(|| {
-            eprintln!("Unsupported language: {code}. Use zh-CN, en, ja, ko, fr, de or ru.");
+        i18n::LanguagePreference::from_code(&code).unwrap_or_else(|| {
+            eprintln!("Unsupported language: {code}. Use auto, zh-CN, en, ja, ko, fr, de or ru.");
             std::process::exit(2);
         })
     });
-    language.unwrap_or_default().activate();
+    language.unwrap_or_default().resolve().activate();
     if std::env::args().any(|arg| arg == "--check-update") {
         match updater::check() {
             Ok(Some(release)) => println!("Update available: {}", release.version),

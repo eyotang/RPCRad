@@ -284,5 +284,8 @@
   "Appearance": "Thème",
   "Changes apply immediately and are saved automatically.": "Les modifications prennent effet immédiatement et sont enregistrées automatiquement.",
   "Close": "Fermer",
-  "Connection": "Connexion"
+  "Connection": "Connexion",
+  "Automatic": "Automatique",
+  "Automatic (system)": "Automatique (système)",
+  "Current language": "Langue actuelle"
 }

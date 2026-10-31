@@ -20,6 +20,7 @@ hex = "0.4"
 getrandom = "0.3"
 zeroize = "1"
 dirs = "6"
+sys-locale = "=0.3.2"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
 
 [build-dependencies]

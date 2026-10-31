@@ -284,5 +284,8 @@
   "Appearance": "Appearance",
   "Changes apply immediately and are saved automatically.": "Changes apply immediately and are saved automatically.",
   "Close": "Close",
-  "Connection": "Connection"
+  "Connection": "Connection",
+  "Automatic": "Automatic",
+  "Automatic (system)": "Automatic (system)",
+  "Current language": "Current language"
 }

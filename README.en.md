@@ -32,7 +32,7 @@ Adjust the path if installed elsewhere. This is optional troubleshooting, not an
 
 ## Interface languages
 
-In **RPCRad → Settings… → Language**, the dropdown supports **简体中文, English, 日本語, 한국어, Français, Deutsch and Русский**. Switching takes effect immediately and the preference is saved. New and older workspaces default to Simplified Chinese. You can also launch with `--language=zh-CN`, `en`, `ja`, `ko`, `fr`, `de` or `ru` (for example, `--language=ja`).
+In **RPCRad → Settings… → Language**, the dropdown supports **简体中文, English, 日本語, 한국어, Français, Deutsch and Русский**. Switching takes effect immediately and the preference is saved. **Automatic (system)** is the default for new workspaces and older ones without a saved language. On startup or when selected, it chooses the first supported system language in preference order. Regional variants map to their language; Chinese variants use Simplified Chinese. If none match or detection fails, English is used. Existing manual choices are retained. Automatic mode displays the resolved language; `--language=auto` enables it. You can also launch with `--language=zh-CN`, `en`, `ja`, `ko`, `fr`, `de` or `ru` (for example, `--language=ja`).
 
 Settings opens in a separate window with **Follow system (default), Light and Dark** themes. Changes apply immediately and are saved; Follow system responds to system appearance changes. Update checks and About also use separate windows. Opening one again brings the existing window forward without replacing the request view. Open Settings with **⌘ ,** on macOS or **Ctrl+,** on Windows/Linux; **Esc** or **⌘/Ctrl+W** closes a utility window.
 

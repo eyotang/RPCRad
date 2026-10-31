@@ -284,5 +284,8 @@
   "Appearance": "主题",
   "Changes apply immediately and are saved automatically.": "修改立即生效并自动保存。",
   "Close": "关闭",
-  "Connection": "连接"
+  "Connection": "连接",
+  "Automatic": "自动检测",
+  "Automatic (system)": "自动检测（跟随系统）",
+  "Current language": "当前语言"
 }

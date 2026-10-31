@@ -26,7 +26,7 @@ def run(app, gui, data):
         if 'PASS:' not in result.stdout:
             raise RuntimeError(f'{arg}: no success marker')
     if gui:
-        languages = [('zh-CN', '简体中文'), ('en', 'English'), ('ja', '日本語'), ('ko', '한국어'), ('fr', 'Français'), ('de', 'Deutsch'), ('ru', 'Русский')]
+        languages = [('zh-CN', '简体中文'), ('en', 'English'), ('ja', '日本語'), ('ko', '한국어'), ('fr', 'Français'), ('de', 'Deutsch'), ('ru', 'Русский'), ('auto', None)]
         for index, (code, label) in enumerate([item for language in languages for item in [language, (None, language[1])]]):
             if code and index > 0:
                 workspace = json.loads((data/'workspace.json').read_text(encoding='utf-8'))
@@ -41,8 +41,14 @@ def run(app, gui, data):
             result = subprocess.run(command, cwd=data, env=env, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=40)
             if result.returncode or not marker.exists():
                 raise RuntimeError(f'Native UI failed: {result.returncode}\n{result.stdout}\n{result.stderr}')
-            if marker.read_text(encoding='utf-8') != f'native frames rendered: {label}':
+            rendered = marker.read_text(encoding='utf-8')
+            if label is not None and rendered != f'native frames rendered: {label}':
                 raise RuntimeError('Native UI used the wrong language')
+            if label is None:
+                if rendered not in {f'native frames rendered: {name}' for _, name in languages if name}:
+                    raise RuntimeError('Automatic language did not resolve to a supported language')
+                if json.loads((data/'workspace.json').read_text(encoding='utf-8'))['language'] != 'auto':
+                    raise RuntimeError('Automatic preference was replaced by the detected language')
             print(f'PASS: native UI rendered {code or "saved language"}; language/theme persistence and utility windows verified')
 
 def main():
