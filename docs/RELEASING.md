@@ -4,7 +4,7 @@
 
 ## 自动发布
 
-1. 修改 Cargo.toml 与 Cargo.lock 版本，添加 `docs/releases/vX.Y.Z.md`。
+1. 修改 Cargo.toml 与 Cargo.lock 版本，从 `docs/releases/TEMPLATE.md` 创建 `docs/releases/vX.Y.Z.md`，填写版本实际内容；按仓库 `AGENTS.md` 保留中英文说明与直接可见的 xattr 命令。打包脚本会在构建和生成清单前检查这些要求。
 2. 本地执行 `cargo fmt --all -- --check`、`cargo test --locked`、Clippy、`python -m unittest discover -s tools/tests`。
 3. 提交 main。工作流在 Apple Silicon、Intel Mac、Windows x64、Ubuntu x64 原生构建安装包，测试被移动到新目录后的包，验证真实请求、签名、原生窗口帧；Windows 安装器还会实际安装、运行和卸载；另在 Arch 容器安装包并测试 Wayland。
 4. 创建并推送与版本严格匹配的标签。所有平台与 Arch 验证通过后，汇总七种包及各自 SHA-256，检查没有遗漏或意外文件，再生成兼容旧客户端的 latest.json，先上传到草稿，再公开发布为 latest。Omarchy / Arch 的安装包在上传时自动标注平台名称，实际文件名与更新清单保持一致。

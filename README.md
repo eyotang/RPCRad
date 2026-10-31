@@ -1,5 +1,7 @@
 # RPCRad
 
+[简体中文](README.md) | [English](README.en.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Français](README.fr.md) | [Deutsch](README.de.md) | [Русский](README.ru.md)
+
 本地 gRPC 桌面调试工具。原生界面使用 Rust、GPUI 与 GPUI-KIT 0.8，真实协议调用使用随应用打包的 grpcurl 1.9.3。没有 WebView。
 
 ## 安装与更新
@@ -11,7 +13,7 @@
 | macOS 15+ | Apple Silicon / Intel | 各自独立的 `.dmg` |
 | Windows 10/11 | x64 | `-setup.exe` 安装器、便携 `.zip` |
 | Ubuntu 24.04+ | x64 | `.deb`、便携 `.tar.gz` |
-| Omarchy / Arch Linux | x64 | [下载 0.4.0 pacman 安装包](https://github.com/eyotang/RPCRad/releases/download/v0.4.0/rpcrad-0.4.0-1-x86_64.pkg.tar.zst)，原生 Wayland 与 X11 |
+| Omarchy / Arch Linux | x64 | [下载 0.5.0 pacman 安装包](https://github.com/eyotang/RPCRad/releases/download/v0.5.0/rpcrad-0.5.0-1-x86_64.pkg.tar.zst)，原生 Wayland 与 X11 |
 
 所有包包含 grpcurl、示例 Proto 和依赖许可证，不需要安装 Rust 或 Go。Windows 安装器创建开始菜单入口并支持卸载；Linux 系统包安装应用菜单和图标。安装步骤、依赖与 macOS `xattr` 命令见 [安装说明](docs/INSTALL.md)。
 
@@ -58,9 +60,9 @@ tools/bin/rpcrad-demo
 
 ## 界面语言
 
-顶部 **简体中文 / English** 下拉框可即时切换语言，无需重启，选择会随工作区保存。菜单、请求编辑、插件、历史详情、环境管理与应用错误提示均支持中英文。首次启动和旧工作区默认使用简体中文。
+顶部 **简体中文 / English / 日本語 / 한국어 / Français / Deutsch / Русский** 下拉框可即时切换语言，无需重启，选择会随工作区保存。菜单、请求编辑、插件、历史详情、环境管理与应用错误提示均支持七种语言。首次启动和旧工作区默认使用简体中文。
 
-请求/响应数据、变量值、环境名称和已记录的调用快照保持原样。服务端错误及第三方插件自行提供的文案不会自动翻译。内置插件提供两种语言；本地插件可提供可选的英文名称、说明和字段标签，详见插件开发说明。启动参数 `--language=en` 或 `--language=zh-CN` 可覆盖保存的选择。
+请求/响应数据、变量值、环境名称和已记录的调用快照保持原样。服务端错误及第三方插件自行提供的文案不会自动翻译。内置插件提供七种语言；本地插件可提供可选的英文名称、说明和字段标签，详见插件开发说明。启动参数可使用 `--language=zh-CN`、`--language=en`、`--language=ja`、`--language=ko`、`--language=fr`、`--language=de`、`--language=ru`，覆盖保存的选择。
 
 ## 环境与变量
 
@@ -103,7 +105,7 @@ tools/bin/rpcrad-demo
 python tools/setup.py
 cargo run --locked
 # 在当前系统构建对应发布包
-python tools/release.py --tag v0.4.0
+python tools/release.py --tag v0.5.0
 ```
 
 首次构建通过 Cargo / Go 下载公开依赖；调试无需账号或云服务。启动时会向 GitHub 检查版本，不上传请求内容。示例服务只监听 127.0.0.1。

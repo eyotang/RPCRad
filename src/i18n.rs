@@ -1,5 +1,4 @@
-//! The UI and background workers share the single workspace's language.
-//! Translate application messages only; never translate request or response data.
+//! Application messages are translated; request/response data stays unchanged.
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicU8, Ordering};
 
@@ -8,6 +7,16 @@ use std::sync::atomic::{AtomicU8, Ordering};
 pub enum Language {
     #[serde(rename = "en")]
     English = 1,
+    #[serde(rename = "ja")]
+    Japanese = 2,
+    #[serde(rename = "ko")]
+    Korean = 3,
+    #[serde(rename = "fr")]
+    French = 4,
+    #[serde(rename = "de")]
+    German = 5,
+    #[serde(rename = "ru")]
+    Russian = 6,
     #[default]
     #[serde(rename = "zh-CN", other)]
     Chinese = 0,
@@ -16,71 +25,104 @@ pub enum Language {
 static LANGUAGE: AtomicU8 = AtomicU8::new(0);
 
 impl Language {
-    pub fn current() -> Self {
-        match LANGUAGE.load(Ordering::Relaxed) {
-            1 => Self::English,
-            _ => Self::Chinese,
-        }
-    }
+    pub const ALL: [Self; 7] = [
+        Self::Chinese,
+        Self::English,
+        Self::Japanese,
+        Self::Korean,
+        Self::French,
+        Self::German,
+        Self::Russian,
+    ];
 
-    pub fn activate(self) {
-        LANGUAGE.store(self as u8, Ordering::Relaxed);
-        gpui_kit::component::set_locale(match self {
+    pub fn current() -> Self {
+        Self::ALL
+            .get(LANGUAGE.load(Ordering::Relaxed) as usize)
+            .copied()
+            .unwrap_or_default()
+    }
+    pub fn from_code(code: &str) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|language| language.code() == code)
+    }
+    pub fn code(self) -> &'static str {
+        match self {
             Self::Chinese => "zh-CN",
             Self::English => "en",
-        });
+            Self::Japanese => "ja",
+            Self::Korean => "ko",
+            Self::French => "fr",
+            Self::German => "de",
+            Self::Russian => "ru",
+        }
     }
-
+    pub fn activate(self) {
+        LANGUAGE.store(self as u8, Ordering::Relaxed);
+        gpui_kit::component::set_locale(self.code());
+    }
     pub fn label(self) -> &'static str {
         match self {
             Self::Chinese => "简体中文",
             Self::English => "English",
+            Self::Japanese => "日本語",
+            Self::Korean => "한국어",
+            Self::French => "Français",
+            Self::German => "Deutsch",
+            Self::Russian => "Русский",
         }
     }
-
+    pub fn message(self, english: &str) -> &str {
+        lookup(self, english).unwrap_or(english)
+    }
+    // Retains the two-argument plugin API; unknown plugin text keeps its original fallback.
     pub fn text<'a>(self, chinese: &'a str, english: &'a str) -> &'a str {
         match self {
             Self::Chinese => chinese,
-            Self::English => english,
+            _ => self.message(english),
         }
     }
 }
 
-// Keep both formats as literals so Rust checks placeholders in both languages.
 macro_rules! tr {
-    ($zh:literal, $en:literal) => {
-        $crate::i18n::Language::current().text($zh, $en)
+    ($message:literal) => {
+        $crate::i18n::Language::current().message($message)
     };
 }
-macro_rules! tr_format {
-    ($zh:literal, $en:literal $(, $args:expr)* $(,)?) => {
-        match $crate::i18n::Language::current() {
-            $crate::i18n::Language::Chinese => format!($zh $(, $args)*),
-            $crate::i18n::Language::English => format!($en $(, $args)*),
-        }
-    };
-}
+// Generated format arms keep Rust's compile-time checks in every language.
+include!(concat!(env!("OUT_DIR"), "/translations.rs"));
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
     #[test]
-    fn language_preference_round_trips_and_unknown_values_fall_back() {
-        for (language, code) in [(Language::Chinese, "zh-CN"), (Language::English, "en")] {
+    fn all_language_preferences_round_trip_and_unknown_values_fall_back() {
+        for language in Language::ALL {
             let json = serde_json::to_string(&language).unwrap();
-            assert_eq!(json, format!("\"{code}\""));
+            assert_eq!(json, format!("\"{}\"", language.code()));
             assert_eq!(serde_json::from_str::<Language>(&json).unwrap(), language);
+            assert_eq!(Language::from_code(language.code()), Some(language));
         }
         assert_eq!(
-            serde_json::from_str::<Language>("\"fr\"").unwrap(),
+            serde_json::from_str::<Language>("\"es\"").unwrap(),
             Language::Chinese
         );
+        assert_eq!(Language::from_code("es"), None);
     }
-
     #[test]
-    fn text_selects_only_the_requested_language() {
-        assert_eq!(Language::Chinese.text("请求体", "Body"), "请求体");
-        assert_eq!(Language::English.text("请求体", "Body"), "Body");
+    fn every_language_has_localized_ui_and_preserves_unknown_plugin_text() {
+        let expected = [
+            "请求体",
+            "Body",
+            "リクエスト本文",
+            "요청 본문",
+            "Corps",
+            "Anfragetext",
+            "Тело запроса",
+        ];
+        for (language, label) in Language::ALL.into_iter().zip(expected) {
+            assert_eq!(language.message("Body"), label);
+            assert_eq!(language.message("custom {{data}}"), "custom {{data}}");
+        }
     }
 }

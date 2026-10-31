@@ -78,7 +78,7 @@ impl HistoryEntry {
                 .map(headers)
                 .unwrap_or_else(|| {
                     let reason = if self.reply.body.trim().is_empty() { self.reply.status.as_str() } else { self.reply.body.trim() };
-                    tr_format!("请求未交给发送进程，没有已发送的请求头。\n\n原因：{reason}\n\n修正后重新发送，结果会保存在一条新的调用记录中。", "The request was not handed to the sender, so there are no sent headers.\n\nReason: {reason}\n\nFix the issue and send again. The result will appear as a new history entry.")
+                    tr_format!("The request was not handed to the sender, so there are no sent headers.\n\nReason: {reason}\n\nFix the issue and send again. The result will appear as a new history entry.", reason = reason)
                 }),
             1 => headers(&self.original_headers),
             2 => self.body.clone(),
@@ -89,7 +89,7 @@ impl HistoryEntry {
     }
     fn changes(&self) -> String {
         let Some(after) = &self.dispatched_headers else {
-            return tr!("未发送", "Not sent").into();
+            return tr!("Not sent").into();
         };
         let before: BTreeMap<_, _> = self.original_headers.iter().map(|(k, v)| (k, v)).collect();
         let after: BTreeMap<_, _> = after.iter().map(|(k, v)| (k, v)).collect();
@@ -100,8 +100,10 @@ impl HistoryEntry {
             .count();
         let removed = before.keys().filter(|k| !after.contains_key(*k)).count();
         tr_format!(
-            "新增 {added} · 修改 {updated} · 移除 {removed}",
-            "Added {added} · Changed {updated} · Removed {removed}"
+            "Added {added} · Changed {updated} · Removed {removed}",
+            added = added,
+            removed = removed,
+            updated = updated
         )
     }
 }
@@ -112,7 +114,7 @@ impl Workbench {
         self.history_revealed.clear();
         self.history_editor
             .update(cx, |state, cx| state.set_value("", window, cx));
-        self.notice = tr!("历史记录已清空", "History cleared").into();
+        self.notice = tr!("History cleared").into();
         cx.notify();
     }
     pub(super) fn clear_history_button(&self, id: &'static str, cx: &mut Context<Self>) -> Button {
@@ -120,8 +122,8 @@ impl Workbench {
             .ghost()
             .small()
             .icon(IconName::Trash)
-            .accessibility_label(tr!("清空历史记录", "Clear history"))
-            .tooltip(tr!("清空历史记录", "Clear history"))
+            .accessibility_label(tr!("Clear history"))
+            .tooltip(tr!("Clear history"))
             .disabled(self.history.is_empty())
             .on_click(cx.listener(|this, _, window, cx| {
                 cx.stop_propagation();
@@ -156,11 +158,9 @@ impl Workbench {
             return;
         };
         let Some(index) = self.methods.iter().position(|m| m.path() == entry.method) else {
-            self.notice = tr!(
-                "此方法不在当前服务定义中，请先重新导入 Proto",
-                "This method is missing from the current definitions; import the proto again"
-            )
-            .into();
+            self.notice =
+                tr!("This method is missing from the current definitions; import the proto again")
+                    .into();
             cx.notify();
             return;
         };
@@ -173,7 +173,7 @@ impl Workbench {
         self.tls = entry.tls;
         self.timeout = entry.timeout;
         self.plugins.invalidate();
-        self.notice = tr!("已载入地址、请求体和连接设置；请求头使用当前配置，发送时重新计算插件", "Address, body and connection settings loaded. Headers use the current settings and plugins run again when sending").into();
+        self.notice = tr!("Address, body and connection settings loaded. Headers use the current settings and plugins run again when sending").into();
         self.save(cx);
         cx.notify();
     }
@@ -190,9 +190,9 @@ impl Workbench {
                 let label = format!(
                     "{} {}",
                     if self.history_revealed.contains(&key) {
-                        tr!("隐藏", "Hide")
+                        tr!("Hide")
                     } else {
-                        tr!("显示", "Show")
+                        tr!("Show")
                     },
                     key
                 );
@@ -210,32 +210,32 @@ impl Workbench {
             })
             .collect();
         panel = panel.child(row().h(px(58.)).px_5().gap_3().border_b_1().border_color(rgb(BORDER))
-            .child(Button::new("history-back").ghost().label(tr!("返回调试", "Back to requests")).on_click(cx.listener(|this,_,_,cx| {this.history_detail = None; cx.notify();})))
-            .child(div().font_weight(FontWeight::SEMIBOLD).child(tr!("调用详情", "Call details")))
-            .child(badge(tr!("只读快照", "Read-only snapshot")))
-            .child(badge(tr_format!("环境：{}", "Environment: {}",entry.environment)))
+            .child(Button::new("history-back").ghost().label(tr!("Back to requests")).on_click(cx.listener(|this,_,_,cx| {this.history_detail = None; cx.notify();})))
+            .child(div().font_weight(FontWeight::SEMIBOLD).child(tr!("Call details")))
+            .child(badge(tr!("Read-only snapshot")))
+            .child(badge(tr_format!("Environment: {}",entry.environment)))
             .child(div().flex_1())
-            .child(Button::new("history-load").label(tr!("载入请求", "Load request")).disabled(self.busy || self.discovering)
-                .tooltip(tr!("载入地址、请求体与连接设置；不会复用旧签名", "Load the address, body and connection settings; generate a fresh signature when sending"))
+            .child(Button::new("history-load").label(tr!("Load request")).disabled(self.busy || self.discovering)
+                .tooltip(tr!("Load the address, body and connection settings; generate a fresh signature when sending"))
                 .on_click(cx.listener(|this,_,window,cx|this.load_history_request(window,cx)))))
             .child(column().p_5().gap_3()
                 .child(row().gap_3().child(div().font_weight(FontWeight::SEMIBOLD).child(entry.method.clone()))
                     .child(badge(entry.reply.status.clone())))
                 .child(row().gap_4().text_sm().text_color(rgb(MUTED)).child(entry.endpoint.clone())
-                    .child(if entry.tls { tr!("TLS 开启", "TLS on") } else { tr!("TLS 关闭", "TLS off") })
-                    .child(tr_format!("{} ms · {} 条消息 · {} B", "{} ms · {} messages · {} B", entry.reply.elapsed_ms, entry.reply.messages, entry.reply.bytes)))
+                    .child(if entry.tls { tr!("TLS on") } else { tr!("TLS off") })
+                    .child(tr_format!("{} ms · {} messages · {} B", entry.reply.elapsed_ms, entry.reply.messages, entry.reply.bytes)))
                 .child(row().gap_4().text_xs().text_color(rgb(MUTED))
-                    .child(tr_format!("调用时间 {}（UTC+8）", "Called at {} (UTC+8)",entry.time_label()))
-                    .child(tr_format!("Unix 毫秒 {}", "Unix milliseconds {}",entry.started_ms)).child(tr_format!("超时 {} 秒", "Timeout {} s",entry.timeout)))
-                .child(row().gap_3().child(badge(entry.plugin.clone().unwrap_or_else(|| tr!("未启用插件", "No plugin enabled").into())))
+                    .child(tr_format!("Called at {} (UTC+8)",entry.time_label()))
+                    .child(tr_format!("Unix milliseconds {}",entry.started_ms)).child(tr_format!("Timeout {} s",entry.timeout)))
+                .child(row().gap_3().child(badge(entry.plugin.clone().unwrap_or_else(|| tr!("No plugin enabled").into())))
                     .child(div().text_sm().text_color(rgb(GREEN)).child(entry.changes())))
                 .child(div().text_xs().text_color(rgb(MUTED)).child(if entry.dispatched_headers.is_some() {
-                    tr!("最终请求头是在发送进程启动时记录的业务 Metadata，包含插件结果；不含 HTTP/2 自动添加的协议头。", "Final headers are the RPC metadata captured when the sender starts, including plugin results. Automatically added HTTP/2 protocol headers are excluded.")
-                } else { tr!("本次请求未交给发送进程，未将插件预览结果标记为已发送。", "This request was not handed to the sender. Plugin previews are not marked as sent.") })))
+                    tr!("Final headers are the RPC metadata captured when the sender starts, including plugin results. Automatically added HTTP/2 protocol headers are excluded.")
+                } else { tr!("This request was not handed to the sender. Plugin previews are not marked as sent.") })))
             .child(column().flex_1().min_h_0().mx_5().mb_5().bg(rgb(0xffffff)).border_1().border_color(rgb(BORDER)).rounded_md().overflow_hidden()
                 .child({
                     let mut tabs = row().flex_wrap().border_b_1().border_color(rgb(BORDER));
-                    for (index,label) in [tr!("最终请求头", "Sent headers"), tr!("插件处理前", "Before plugin"), tr!("请求体", "Body"), tr!("响应", "Response"), tr!("响应 Headers", "Response headers"), "Trailers"].into_iter().enumerate() {
+                    for (index,label) in [tr!("Sent headers"), tr!("Before plugin"), tr!("Body"), tr!("Response"), tr!("Response headers"), "Trailers"].into_iter().enumerate() {
                         tabs = tabs.child(tab(("history-tab",index),label,self.history_tab==index)
                             .on_click(cx.listener(move|this,_,window,cx|{this.history_tab=index; this.refresh_history(window,cx); cx.notify();})));
                     }
@@ -243,16 +243,16 @@ impl Workbench {
                 })
                 .child(row().px_4().py_2().min_h(px(42.)).flex_wrap().gap_3().border_b_1().border_color(rgb(BORDER))
                     .child(div().text_xs().text_color(rgb(MUTED)).child(if self.history_tab <= 1 {
-                        tr!("普通头部完整显示；敏感字段可单独展开，复制与当前显示一致", "Plain headers are visible. Reveal sensitive fields individually. Copy matches what is shown.")
-                    } else { tr!("本次调用的原始快照", "Original snapshot of this call") }))
+                        tr!("Plain headers are visible. Reveal sensitive fields individually. Copy matches what is shown.")
+                    } else { tr!("Original snapshot of this call") }))
                     .child(div().flex_1())
                     .children(reveal_buttons)
-                    .child(Button::new("history-copy").ghost().small().label(tr!("复制当前内容", "Copy current content"))
+                    .child(Button::new("history-copy").ghost().small().label(tr!("Copy current content"))
                         .on_click(cx.listener(|this,_,_,cx|{
                             if let Some(entry) = &this.history_detail { cx.write_to_clipboard(ClipboardItem::new_string(entry.content(this.history_tab,&this.history_revealed))); }
                         }))))
-                .child(div().flex_1().min_h_0().pt_2().child(Editor::new(&self.history_editor).readonly(true).h(relative(1.)).bordered(false).appearance(false).text_size(px(13.)))))
-            .child(div().px_5().pb_3().text_xs().text_color(rgb(MUTED)).child(tr!("记录仅保存在当前会话，最多 50 条。插件 Secret 不写入调用记录。", "Up to 50 calls are kept for this session only. Plugin secrets are never written to history.")));
+                .child(div().flex_1().min_h_0().pt_2().child(localized_editor(&self.history_editor).readonly(true).h(relative(1.)).bordered(false).appearance(false).text_size(px(13.)))))
+            .child(div().px_5().pb_3().text_xs().text_color(rgb(MUTED)).child(tr!("Up to 50 calls are kept for this session only. Plugin secrets are never written to history.")));
         panel
     }
 }

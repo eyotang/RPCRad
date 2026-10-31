@@ -37,16 +37,11 @@ pub fn release_page(value: &str) -> Option<String> {
 fn parse(bytes: &[u8], current: &str) -> Result<Option<Release>> {
     ensure!(
         bytes.len() as u64 <= LIMIT,
-        tr!(
-            "更新清单超过大小限制",
-            "Update manifest exceeds the size limit"
-        )
+        tr!("Update manifest exceeds the size limit")
     );
-    let release: Release = serde_json::from_slice(bytes)
-        .context(tr!("更新清单格式无效", "Invalid update manifest"))?;
-    let available =
-        version(&release.version).context(tr!("发布版本号无效", "Invalid release version"))?;
-    let current = version(current).context(tr!("当前版本号无效", "Invalid current version"))?;
+    let release: Release = serde_json::from_slice(bytes).context(tr!("Invalid update manifest"))?;
+    let available = version(&release.version).context(tr!("Invalid release version"))?;
+    let current = version(current).context(tr!("Invalid current version"))?;
     Ok((available > current).then_some(release))
 }
 pub fn check() -> Result<Option<Release>> {
@@ -55,27 +50,23 @@ pub fn check() -> Result<Option<Release>> {
         .user_agent(concat!("RPCRad/", env!("CARGO_PKG_VERSION")))
         .redirect(reqwest::redirect::Policy::custom(|attempt| {
             if attempt.previous().len() >= 5 || attempt.url().scheme() != "https" {
-                attempt.error(tr!("更新链接重定向无效", "Invalid update redirect"))
+                attempt.error(tr!("Invalid update redirect"))
             } else {
                 attempt.follow()
             }
         }))
         .build()?;
-    let response = client.get(MANIFEST_URL).send().context(tr!(
-        "无法连接 GitHub 更新服务",
-        "Cannot connect to the GitHub update service"
-    ))?;
+    let response = client
+        .get(MANIFEST_URL)
+        .send()
+        .context(tr!("Cannot connect to the GitHub update service"))?;
     ensure!(
         response.status() != reqwest::StatusCode::NOT_FOUND,
-        tr!(
-            "尚无公开的更新清单",
-            "No public update manifest is available yet"
-        )
+        tr!("No public update manifest is available yet")
     );
-    let response = response.error_for_status().context(tr!(
-        "更新服务返回错误",
-        "The update service returned an error"
-    ))?;
+    let response = response
+        .error_for_status()
+        .context(tr!("The update service returned an error"))?;
     let mut bytes = Vec::new();
     response.take(LIMIT + 1).read_to_end(&mut bytes)?;
     parse(&bytes, env!("CARGO_PKG_VERSION"))

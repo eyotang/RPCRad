@@ -1,6 +1,7 @@
 mod environments;
 mod language;
 use crate::i18n::Language;
+use language::{localized_editor, localized_input, mask_button};
 mod headers;
 use environments::EnvironmentUi;
 mod history;
@@ -227,13 +228,11 @@ impl Workbench {
                 saved.endpoint
             })
         });
-        let search = cx.new(|cx| {
-            InputState::new(window, cx)
-                .placeholder(tr!("搜索服务或方法", "Search services or methods"))
-        });
+        let search =
+            cx.new(|cx| InputState::new(window, cx).placeholder(tr!("Search services or methods")));
         let token = cx.new(|cx| {
             InputState::new(window, cx)
-                .placeholder(tr!("输入 Bearer token", "Enter Bearer token"))
+                .placeholder(tr!("Enter Bearer token"))
                 .masked(true)
         });
         let request = cx.new(|cx| {
@@ -344,11 +343,7 @@ impl Workbench {
             cancel: Arc::new(AtomicBool::new(false)),
             receiver: None,
             raw_output: String::new(),
-            notice: tr!(
-                "示例 Proto 已加载 · 连接本地服务开始调试",
-                "Sample protos loaded · Connect to a local service to get started"
-            )
-            .into(),
+            notice: tr!("Sample protos loaded · Connect to a local service to get started").into(),
             dirty_since: None,
             _subscriptions: subscriptions,
             active_call: None,
@@ -397,7 +392,7 @@ impl Workbench {
             Ok(())
         })();
         if let Err(error) = result {
-            self.notice = tr_format!("保存失败：{error}", "Could not save: {error}");
+            self.notice = tr_format!("Could not save: {error}", error = error);
         }
         self.dirty_since = None;
     }
@@ -449,7 +444,7 @@ impl Workbench {
             .trim_start_matches("http://")
             .to_string();
         if endpoint.is_empty() {
-            anyhow::bail!(tr_format!("请输入服务地址", "Enter a server address"));
+            anyhow::bail!(tr_format!("Enter a server address"));
         }
         Ok(Connection {
             endpoint,
@@ -474,16 +469,12 @@ impl Workbench {
             return;
         }
         let Some(method) = self.current().cloned() else {
-            self.notice = tr!(
-                "请先导入 Proto 或发现服务",
-                "Import a proto or discover services first"
-            )
-            .into();
+            self.notice = tr!("Import a proto or discover services first").into();
             cx.notify();
             return;
         };
         if method.client_stream {
-            self.notice = tr!("预览版支持 Unary 和服务端流；客户端流与双向流尚未开放", "This preview supports unary and server streaming; client and bidirectional streaming are not yet available").into();
+            self.notice = tr!("This preview supports unary and server streaming; client and bidirectional streaming are not yet available").into();
             cx.notify();
             return;
         }
@@ -503,7 +494,7 @@ impl Workbench {
         let (body, mut connection, plugin, environment) = match prepared {
             Ok(prepared) => prepared,
             Err(error) => {
-                self.notice = tr_format!("未发送：{error}", "Not sent: {error}");
+                self.notice = tr_format!("Not sent: {error}", error = error);
                 cx.notify();
                 return;
             }
@@ -514,7 +505,7 @@ impl Workbench {
         self.reply = Reply::default();
         self.response_tab = 0;
         self.raw_output.clear();
-        self.notice = tr_format!("正在调用 {} …", "Calling {} …", method.name);
+        self.notice = tr_format!("Calling {} …", method.name);
         self.active_call = Some(HistoryEntry::pending(
             &method,
             &connection,
@@ -544,7 +535,7 @@ impl Workbench {
                     }
                     Err(error) => {
                         let _ = tx.send(Event::Finished(Reply {
-                            status: tr!("插件失败 · 未发送", "Plugin failed · Not sent").into(),
+                            status: tr!("Plugin failed · Not sent").into(),
                             body: error.to_string(),
                             ..Default::default()
                         }));
@@ -554,7 +545,7 @@ impl Workbench {
             }
             if cancel.load(Ordering::Relaxed) {
                 let _ = tx.send(Event::Finished(Reply {
-                    status: tr!("已取消", "Cancelled").into(),
+                    status: tr!("Cancelled").into(),
                     ..Default::default()
                 }));
                 return;
@@ -585,16 +576,16 @@ impl Workbench {
                     self.raw_output.push_str(&line);
                     self.raw_output.push('\n');
                     self.reply = rpc::parse_output(&self.raw_output);
-                    self.reply.status = tr!("接收中", "Receiving").into();
+                    self.reply.status = tr!("Receiving").into();
                 }
                 Event::Finished(reply) => {
                     self.busy = false;
                     self.receiver = None;
                     self.reply = reply;
                     self.notice = if self.reply.status == "0 OK" {
-                        tr!("调用完成", "Call completed").into()
+                        tr!("Call completed").into()
                     } else {
-                        tr_format!("调用结束 · {}", "Call ended · {}", self.reply.status)
+                        tr_format!("Call ended · {}", self.reply.status)
                     };
                     if let Some(mut entry) = self.active_call.take() {
                         self.responses
@@ -628,14 +619,10 @@ impl Workbench {
                             self.request
                                 .update(cx, |s, cx| s.set_value(body, window, cx));
                             self.switch(0, window, cx);
-                            self.notice = tr_format!(
-                                "已加载 {} 个方法",
-                                "Loaded {} methods",
-                                self.methods.len()
-                            );
+                            self.notice = tr_format!("Loaded {} methods", self.methods.len());
                         }
                         Err(error) => {
-                            self.notice = tr_format!("加载失败：{error}", "Could not load: {error}")
+                            self.notice = tr_format!("Could not load: {error}", error = error)
                         }
                     }
                 }
@@ -676,7 +663,7 @@ impl Workbench {
         };
         connection.protos = paths.clone();
         self.discovering = true;
-        self.notice = tr!("正在解析服务定义 …", "Loading service definitions …").into();
+        self.notice = tr!("Loading service definitions …").into();
         let (tx, rx) = mpsc::channel();
         self.receiver = Some(rx);
         std::thread::spawn(move || {
@@ -690,7 +677,7 @@ impl Workbench {
             files: true,
             directories: false,
             multiple: true,
-            prompt: Some(tr!("选择 Proto 文件", "Select proto files").into()),
+            prompt: Some(tr!("Select proto files").into()),
         });
         cx.spawn_in(window, async move |this, cx| {
             if let Ok(Ok(Some(paths))) = paths.await {
@@ -715,7 +702,6 @@ impl Workbench {
         };
         if editor.read(cx).value().contains("{{") {
             self.notice = tr!(
-                "含变量模板的内容保留原样；发送前会替换并验证 JSON",
                 "Variable templates are preserved; JSON is resolved and validated before sending"
             )
             .into();
@@ -727,11 +713,9 @@ impl Workbench {
         {
             Ok(text) => {
                 editor.update(cx, |state, cx| state.set_value(text, window, cx));
-                self.notice = tr!("JSON 已格式化", "JSON formatted").into();
+                self.notice = tr!("JSON formatted").into();
             }
-            Err(error) => {
-                self.notice = tr_format!("JSON 格式错误：{error}", "Invalid JSON: {error}")
-            }
+            Err(error) => self.notice = tr_format!("Invalid JSON: {error}", error = error),
         }
         cx.notify();
     }
@@ -814,7 +798,7 @@ impl Workbench {
                 .ghost()
                 .small()
                 .icon(IconName::Plus)
-                .tooltip(tr!("查找并打开方法", "Find and open a method"))
+                .tooltip(tr!("Find and open a method"))
                 .on_click(cx.listener(|this, _, window, cx| {
                     this.search.update(cx, |s, cx| s.focus(window, cx))
                 })),
@@ -822,13 +806,7 @@ impl Workbench {
         let title = self
             .current()
             .map(|m| format!("{}  /  {}", m.service, m.name))
-            .unwrap_or_else(|| {
-                tr!(
-                    "导入服务定义开始调试",
-                    "Import service definitions to get started"
-                )
-                .into()
-            });
+            .unwrap_or_else(|| tr!("Import service definitions to get started").into());
         let kind = self.current().map(Method::kind).unwrap_or("gRPC");
         let favorite = self
             .current()
@@ -854,7 +832,7 @@ impl Workbench {
                             .small()
                             .icon(IconName::Star)
                             .when(favorite, |s| s.text_color(rgb(GREEN)))
-                            .tooltip(tr!("收藏此方法", "Favorite this method"))
+                            .tooltip(tr!("Favorite this method"))
                             .on_click(cx.listener(|this, _, _, cx| {
                                 if let Some(method) = this.current() {
                                     let path = method.path();
@@ -876,14 +854,14 @@ impl Workbench {
                     .child(
                         div()
                             .flex_1()
-                            .child(Input::new(&self.endpoint).prefix(icon(IconName::Server))),
+                            .child(localized_input(&self.endpoint).prefix(icon(IconName::Server))),
                     )
                     .child(
                         Button::new("tls")
                             .label(if self.tls {
-                                tr!("TLS 开启", "TLS on")
+                                tr!("TLS on")
                             } else {
-                                tr!("TLS 关闭", "TLS off")
+                                tr!("TLS off")
                             })
                             .icon(if self.tls {
                                 IconName::Lock
@@ -913,19 +891,17 @@ impl Workbench {
                     .child(
                         Button::new("send")
                             .primary()
-                            .w(px(122.))
+                            .min_w(px(122.))
+                            .flex_shrink_0()
                             .icon(if self.busy {
                                 IconName::Square
                             } else {
                                 IconName::Play
                             })
                             .label(if self.busy {
-                                tr!("停止", "Stop")
+                                tr!("Stop")
                             } else {
-                                platform_text(
-                                    tr!("发送  ⌘ ↵", "Send  ⌘ ↵"),
-                                    tr!("发送  Ctrl ↵", "Send  Ctrl ↵"),
-                                )
+                                platform_text(tr!("Send  ⌘ ↵"), tr!("Send  Ctrl ↵"))
                             })
                             .disabled(self.discovering)
                             .on_click(cx.listener(|this, _, window, cx| this.send(window, cx))),
@@ -967,7 +943,7 @@ impl Workbench {
                         row()
                             .id("history-drawer")
                             .role(Role::Button)
-                            .aria_label(tr!("调用记录", "Call history"))
+                            .aria_label(tr!("Call history"))
                             .h(px(36.))
                             .px_3()
                             .gap_2()
@@ -977,7 +953,7 @@ impl Workbench {
                             } else {
                                 IconName::ChevronRight
                             }))
-                            .child(tr!("调用记录", "Call history"))
+                            .child(tr!("Call history"))
                             .child(badge(self.history.len().to_string()))
                             .child(div().flex_1())
                             .child(
@@ -992,7 +968,7 @@ impl Workbench {
                                                 h.reply.elapsed_ms
                                             )
                                         })
-                                        .unwrap_or_else(|| tr!("尚无调用", "No calls yet").into()),
+                                        .unwrap_or_else(|| tr!("No calls yet").into()),
                                 ),
                             )
                             .child(self.clear_history_button("clear-history-drawer", cx))
@@ -1012,7 +988,6 @@ impl Workbench {
                                         .id(("history-row", index))
                                         .role(Role::Button)
                                         .aria_label(tr_format!(
-                                            "查看调用详情 {} {}",
                                             "View call details {} {}",
                                             h.method,
                                             h.reply.status
@@ -1075,7 +1050,7 @@ impl Render for Workbench {
             }))
             .on_action(cx.listener(|this, _: &SaveWorkspace, _, cx| {
                 this.save(cx);
-                this.notice = tr!("工作区已保存", "Workspace saved").into();
+                this.notice = tr!("Workspace saved").into();
                 cx.notify();
             }))
             .child(
@@ -1089,7 +1064,9 @@ impl Render for Workbench {
                     .child(
                         div()
                             .font_weight(FontWeight::SEMIBOLD)
-                            .child(tr!("本地工作区", "Local workspace")),
+                            .max_w(px(180.))
+                            .truncate()
+                            .child(tr!("Local workspace")),
                     )
                     .child(
                         div()
@@ -1104,15 +1081,12 @@ impl Render for Workbench {
                                 .ghost()
                                 .label("RPCRad")
                                 .icon(IconName::ChevronDown)
-                                .accessibility_label(tr!("RPCRad 菜单", "RPCRad menu"))
+                                .accessibility_label(tr!("RPCRad menu"))
                                 .dropdown_menu(|menu, _, _| {
-                                    menu.menu(tr!("关于 RPCRad…", "About RPCRad…"), Box::new(About))
-                                        .menu(
-                                            tr!("检查更新…", "Check for updates…"),
-                                            Box::new(CheckUpdates),
-                                        )
+                                    menu.menu(tr!("About RPCRad…"), Box::new(About))
+                                        .menu(tr!("Check for updates…"), Box::new(CheckUpdates))
                                         .separator()
-                                        .menu(tr!("退出 RPCRad", "Quit RPCRad"), Box::new(Quit))
+                                        .menu(tr!("Quit RPCRad"), Box::new(Quit))
                                 }),
                         )
                     })
@@ -1120,7 +1094,7 @@ impl Render for Workbench {
                         s.child(
                             Button::new("update-banner")
                                 .ghost()
-                                .label(tr_format!("新版本 {}", "Update {}", release.version))
+                                .label(tr_format!("Update {}", release.version))
                                 .on_click(cx.listener(|this, _, _, cx| {
                                     this.show_about(false, cx);
                                 })),
@@ -1132,7 +1106,7 @@ impl Render for Workbench {
                         Button::new("manage-variables")
                             .ghost()
                             .icon(IconName::Braces)
-                            .label(tr!("变量", "Variables"))
+                            .label(tr!("Variables"))
                             .on_click(cx.listener(|this, _, _, cx| this.open_environments(cx))),
                     )
                     .child(
@@ -1140,8 +1114,8 @@ impl Render for Workbench {
                             .ghost()
                             .icon(IconName::Search)
                             .label(platform_text(
-                                tr!("搜索方法   ⌘ K", "Find method   ⌘ K"),
-                                tr!("搜索方法   Ctrl K", "Find method   Ctrl K"),
+                                tr!("Find method   ⌘ K"),
+                                tr!("Find method   Ctrl K"),
                             ))
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.search.update(cx, |s, cx| s.focus(window, cx))
@@ -1151,7 +1125,7 @@ impl Render for Workbench {
                         Button::new("settings")
                             .ghost()
                             .icon(IconName::Settings)
-                            .tooltip(tr!("设置与更新", "Settings and updates"))
+                            .tooltip(tr!("Settings and updates"))
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.about_open = false;
                                 this.history_detail = None;
@@ -1185,10 +1159,9 @@ impl Render for Workbench {
                     .text_color(rgb(MUTED))
                     .child(div().text_color(rgb(GREEN)).child("●"))
                     .child(if self.discovering {
-                        tr!("正在加载服务", "Loading services").to_string()
+                        tr!("Loading services").to_string()
                     } else {
                         tr_format!(
-                            "{} 个定义文件 · {} 个方法",
                             "{} proto files · {} methods",
                             self.protos.len(),
                             self.methods.len()
@@ -1197,9 +1170,9 @@ impl Render for Workbench {
                     .child(div().w(px(1.)).h(px(10.)).bg(rgb(BORDER)))
                     .child(div().flex_1().overflow_hidden().child(self.notice.clone()))
                     .child(if self.dirty_since.is_some() {
-                        tr!("保存中…", "Saving…")
+                        tr!("Saving…")
                     } else {
-                        tr!("已保存到本地", "Saved locally")
+                        tr!("Saved locally")
                     })
                     .child(concat!("v", env!("CARGO_PKG_VERSION")))
                     .child("UTF-8"),
@@ -1358,7 +1331,7 @@ pub fn smoke_test() -> anyhow::Result<()> {
         })
         .ok_or_else(|| anyhow::anyhow!("No cancelled response"))?;
     anyhow::ensure!(
-        cancelled.status == tr!("已取消", "Cancelled") && cancelled.elapsed_ms < 2000,
+        cancelled.status == tr!("Cancelled") && cancelled.elapsed_ms < 2000,
         "Cancellation failed: {cancelled:?}"
     );
     println!(
@@ -1384,15 +1357,17 @@ impl Workbench {
                     .py_3()
                     .text_color(rgb(MUTED))
                     .text_xs()
-                    .child(tr!("本次会话", "This session"))
+                    .child(tr!("This session"))
                     .child(div().flex_1())
                     .child(self.clear_history_button("clear-history-sidebar", cx)),
             );
             if self.history.is_empty() {
-                tree = tree.child(div().p_3().text_color(rgb(MUTED)).child(tr!(
-                    "发送请求后，调用记录会显示在这里。",
-                    "Sent requests appear here."
-                )));
+                tree = tree.child(
+                    div()
+                        .p_3()
+                        .text_color(rgb(MUTED))
+                        .child(tr!("Sent requests appear here.")),
+                );
             }
             for (index, entry) in self.history.iter().enumerate() {
                 tree = tree.child(
@@ -1400,7 +1375,6 @@ impl Workbench {
                         .id(("history", index))
                         .role(Role::Button)
                         .aria_label(tr_format!(
-                            "查看调用详情 {} {}",
                             "View call details {} {}",
                             entry.method,
                             entry.reply.status
@@ -1583,7 +1557,7 @@ impl Workbench {
                     .gap_2()
                     .text_color(rgb(MUTED))
                     .child(icon(IconName::Star))
-                    .child(tr!("收藏", "Favorites")),
+                    .child(tr!("Favorites")),
             );
             if self.favorites.is_empty() {
                 tree = tree.child(
@@ -1592,10 +1566,7 @@ impl Workbench {
                         .py_2()
                         .text_size(px(11.))
                         .text_color(rgb(MUTED))
-                        .child(tr!(
-                            "点击方法右侧的 ☆ 添加收藏",
-                            "Click ☆ next to a method to add a favorite"
-                        )),
+                        .child(tr!("Click ☆ next to a method to add a favorite")),
                 );
             }
             for (index, method) in self
@@ -1631,7 +1602,7 @@ impl Workbench {
                     .gap_1()
                     .child(
                         Button::new("services-mode")
-                            .label(tr!("服务", "Services"))
+                            .label(tr!("Services"))
                             .flex_1()
                             .when(!self.history_mode, |s| s.primary())
                             .on_click(cx.listener(|this, _, _, cx| {
@@ -1641,7 +1612,7 @@ impl Workbench {
                     )
                     .child(
                         Button::new("history-mode")
-                            .label(tr!("历史", "History"))
+                            .label(tr!("History"))
                             .flex_1()
                             .ghost()
                             .on_click(cx.listener(|this, _, _, cx| {
@@ -1652,7 +1623,7 @@ impl Workbench {
             )
             .child(
                 div().px_3().pb_3().child(
-                    Input::new(&self.search)
+                    localized_input(&self.search)
                         .small()
                         .prefix(icon(IconName::Search)),
                 ),
@@ -1665,7 +1636,7 @@ impl Workbench {
                         Button::new("import")
                             .small()
                             .icon(IconName::Plus)
-                            .label(tr!("导入 Proto", "Import proto"))
+                            .label(tr!("Import proto"))
                             .flex_1()
                             .disabled(self.busy || self.discovering)
                             .on_click(cx.listener(|this, _, w, cx| this.import(w, cx))),
@@ -1674,7 +1645,7 @@ impl Workbench {
                         Button::new("reflection")
                             .small()
                             .icon(IconName::RefreshCw)
-                            .label(tr!("服务反射", "Server reflection"))
+                            .label(tr!("Server reflection"))
                             .flex_1()
                             .disabled(self.busy || self.discovering)
                             .on_click(cx.listener(|this, _, _, cx| this.discover(vec![], cx))),
@@ -1691,25 +1662,27 @@ impl Workbench {
                         row()
                             .gap_2()
                             .child(icon(IconName::Folder))
-                            .child(tr!("本地工作区", "Local workspace"))
+                            .child(tr!("Local workspace"))
                             .child(div().flex_1())
                             .child(div().text_color(rgb(GREEN)).child(icon(IconName::Check))),
                     )
-                    .child(div().text_size(px(10.)).text_color(rgb(MUTED)).child(tr!(
-                        "请求自动保存 · 无需登录",
-                        "Requests saved automatically · No sign-in"
-                    ))),
+                    .child(
+                        div()
+                            .text_size(px(10.))
+                            .text_color(rgb(MUTED))
+                            .child(tr!("Requests saved automatically · No sign-in")),
+                    ),
             )
     }
 
     fn request_panel(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let mut tabs = row().border_b_1().border_color(rgb(BORDER));
         for (index, label) in [
-            tr!("请求体", "Body"),
+            tr!("Body"),
             "Metadata",
-            tr!("认证", "Auth"),
-            tr!("设置", "Settings"),
-            tr!("插件", "Plugins"),
+            tr!("Auth"),
+            tr!("Settings"),
+            tr!("Plugins"),
         ]
         .into_iter()
         .enumerate()
@@ -1741,7 +1714,7 @@ impl Workbench {
                                     .ghost()
                                     .small()
                                     .icon(IconName::FileCode)
-                                    .label(tr!("生成示例", "Generate example"))
+                                    .label(tr!("Generate example"))
                                     .on_click(cx.listener(|this, _, window, cx| {
                                         if let Some(method) = this.current() {
                                             let sample = method.sample.clone();
@@ -1757,7 +1730,7 @@ impl Workbench {
                                 .ghost()
                                 .small()
                                 .icon(IconName::Braces)
-                                .label(tr!("格式化", "Format"))
+                                .label(tr!("Format"))
                                 .on_click(
                                     cx.listener(|this, _, window, cx| this.format(window, cx)),
                                 ),
@@ -1765,7 +1738,7 @@ impl Workbench {
                 )
                 .child(
                     div().flex_1().min_h_0().pt_2().child(
-                        Editor::new(if self.request_tab == 0 {
+                        localized_editor(if self.request_tab == 0 {
                             &self.request
                         } else {
                             &self.metadata
@@ -1788,15 +1761,19 @@ impl Workbench {
                             .font_weight(FontWeight::SEMIBOLD)
                             .child("Bearer Token"),
                     )
-                    .child(div().text_color(rgb(MUTED)).text_sm().child(tr!(
-                        "随请求发送到 authorization Metadata。",
-                        "Sent as authorization metadata with each request."
-                    )))
-                    .child(Input::new(&self.token))
-                    .child(div().text_xs().text_color(rgb(MUTED)).child(tr!(
-                        "认证信息仅保留在本次会话。",
-                        "Authentication is kept only for this session."
-                    ))),
+                    .child(
+                        div()
+                            .text_color(rgb(MUTED))
+                            .text_sm()
+                            .child(tr!("Sent as authorization metadata with each request.")),
+                    )
+                    .child(localized_input(&self.token))
+                    .child(
+                        div()
+                            .text_xs()
+                            .text_color(rgb(MUTED))
+                            .child(tr!("Authentication is kept only for this session.")),
+                    ),
             );
         } else {
             content = content.child(
@@ -1805,11 +1782,11 @@ impl Workbench {
                     .gap_5()
                     .id("settings-scroll")
                     .overflow_y_scroll()
-                    .child(div().font_weight(FontWeight::SEMIBOLD).child(tr!("连接设置", "Connection settings")))
+                    .child(div().font_weight(FontWeight::SEMIBOLD).child(tr!("Connection settings")))
                     .child(
-                        row().justify_between().child(tr!("TLS 加密", "TLS encryption")).child(
+                        row().justify_between().child(tr!("TLS encryption")).child(
                             Button::new("tls-settings")
-                                .label(if self.tls { tr!("已开启", "On") } else { tr!("已关闭", "Off") })
+                                .label(if self.tls { tr!("On") } else { tr!("Off") })
                                 .on_click(cx.listener(|this, _, _, cx| {
                                     this.tls = !this.tls;
                                     this.save(cx);
@@ -1821,12 +1798,12 @@ impl Workbench {
                         div()
                             .text_xs()
                             .text_color(rgb(MUTED))
-                            .child(tr!("开启后使用系统信任的 CA 验证服务证书。", "Verify the server certificate using system-trusted CAs.")),
+                            .child(tr!("Verify the server certificate using system-trusted CAs.")),
                     )
                     .child(
-                        row().justify_between().child(tr!("请求超时", "Request timeout")).child(
+                        row().justify_between().child(tr!("Request timeout")).child(
                             Button::new("timeout-settings")
-                                .label(tr_format!("{} 秒", "{} s", self.timeout))
+                                .label(tr_format!("{} s", self.timeout))
                                 .on_click(cx.listener(|this, _, _, cx| {
                                     this.timeout = match this.timeout {
                                         5 => 15,
@@ -1842,7 +1819,7 @@ impl Workbench {
                         div()
                             .text_xs()
                             .text_color(rgb(MUTED))
-                            .child(tr!("点击切换 5 / 15 / 30 秒，流式请求也受此限制。", "Click to cycle through 5 / 15 / 30 seconds. Also applies to streams.")),
+                            .child(tr!("Click to cycle through 5 / 15 / 30 seconds. Also applies to streams.")),
                     )
                     .child(
                         div()
@@ -1851,7 +1828,7 @@ impl Workbench {
                             .pt_4()
                             .text_xs()
                             .text_color(rgb(MUTED))
-                            .child(tr!("预览版支持 Unary 与服务端流。mTLS、客户端流和双向流尚未开放。", "Supports unary and server streaming. mTLS, client and bidirectional streaming are not yet available.")),
+                            .child(tr!("Supports unary and server streaming. mTLS, client and bidirectional streaming are not yet available.")),
                     )
                     .child(self.update_panel(cx)),
             );
@@ -1879,9 +1856,7 @@ impl Workbench {
                         IconName::CircleAlert
                     }))
                     .child(match validation {
-                        Ok(_) => {
-                            tr!("变量与 JSON 有效", "Variables and JSON are valid").to_string()
-                        }
+                        Ok(_) => tr!("Variables and JSON are valid").to_string(),
                         Err(error) => error.to_string(),
                     }),
             )
@@ -1898,7 +1873,7 @@ impl Workbench {
             .px_2()
             .border_b_1()
             .border_color(rgb(0xf0f3f1));
-        for (index, label) in [tr!("消息", "Messages"), "Headers", "Trailers"]
+        for (index, label) in [tr!("Messages"), "Headers", "Trailers"]
             .into_iter()
             .enumerate()
         {
@@ -1934,7 +1909,7 @@ impl Workbench {
                     .child(
                         div()
                             .font_weight(FontWeight::SEMIBOLD)
-                            .child(tr!("响应", "Response")),
+                            .child(tr!("Response")),
                     )
                     .when(!self.reply.status.is_empty(), |s| {
                         s.child(
@@ -1968,12 +1943,12 @@ impl Workbench {
                             .ghost()
                             .small()
                             .icon(IconName::Copy)
-                            .tooltip(tr!("复制当前响应", "Copy current response"))
+                            .tooltip(tr!("Copy current response"))
                             .on_click(cx.listener(|this, _, _, cx| {
                                 cx.write_to_clipboard(ClipboardItem::new_string(
                                     this.response.read(cx).value().to_string(),
                                 ));
-                                this.notice = tr!("已复制到剪贴板", "Copied to clipboard").into();
+                                this.notice = tr!("Copied to clipboard").into();
                                 cx.notify();
                             })),
                     ),
@@ -2008,17 +1983,14 @@ impl Workbench {
                                     .child(
                                         div()
                                             .font_weight(FontWeight::MEDIUM)
-                                            .child(tr!("准备接收响应", "Ready for a response")),
+                                            .child(tr!("Ready for a response")),
                                     )
                                     .child(div().text_size(px(12.)).text_color(rgb(MUTED)).child(
-                                        tr!(
-                                            "发送请求，在这里查看服务返回的数据",
-                                            "Send a request to view the server response here"
-                                        ),
+                                        tr!("Send a request to view the server response here"),
                                     ))
                                     .child(badge(platform_text(
-                                        tr!("⌘ Enter 发送请求", "⌘ Enter to send"),
-                                        tr!("Ctrl Enter 发送请求", "Ctrl Enter to send"),
+                                        tr!("⌘ Enter to send"),
+                                        tr!("Ctrl Enter to send"),
                                     ))),
                             )
                         },
@@ -2027,7 +1999,7 @@ impl Workbench {
                         !self.reply.body.is_empty() || self.busy || self.response_tab != 0,
                         |s| {
                             s.pt_2().child(
-                                Editor::new(&self.response)
+                                localized_editor(&self.response)
                                     .h(relative(1.))
                                     .readonly(true)
                                     .bordered(false)
@@ -2050,20 +2022,11 @@ impl Workbench {
                         IconName::CircleCheck
                     }))
                     .child(if self.busy {
-                        tr_format!(
-                            "接收中 · {} 条消息",
-                            "Receiving · {} messages",
-                            self.reply.messages
-                        )
+                        tr_format!("Receiving · {} messages", self.reply.messages)
                     } else if self.reply.status.is_empty() {
-                        tr!("等待调用", "Waiting for a call").into()
+                        tr!("Waiting for a call").into()
                     } else {
-                        tr_format!(
-                            "{} · {} 条消息",
-                            "{} · {} messages",
-                            self.reply.status,
-                            self.reply.messages
-                        )
+                        tr_format!("{} · {} messages", self.reply.status, self.reply.messages)
                     }),
             )
     }

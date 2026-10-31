@@ -6,6 +6,8 @@ import unittest
 spec = importlib.util.spec_from_file_location('release', Path(__file__).resolve().parents[1]/'release.py')
 release = importlib.util.module_from_spec(spec); spec.loader.exec_module(release)
 
+NOTES = (Path(__file__).resolve().parents[2]/"docs/releases/v0.4.0.md").read_text(encoding="utf-8")
+
 class ReleaseContract(unittest.TestCase):
     def populate(self, folder, targets=release.PLATFORMS):
         for target in targets:
@@ -21,9 +23,9 @@ class ReleaseContract(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root=Path(temporary)
             self.populate(root, ('macos-arm64',))
-            with self.assertRaises(ValueError): release.manifest(root,'0.2.0','notes')
+            with self.assertRaises(ValueError): release.manifest(root,'0.2.0',NOTES)
             self.populate(root)
-            result=release.manifest(root,'0.2.0','notes')
+            result=release.manifest(root,'0.2.0',NOTES)
             self.assertEqual(len(result['downloads']),7)
             for target in release.PLATFORMS:
                 for name,key in release.packages('0.2.0',target).items():
@@ -35,10 +37,10 @@ class ReleaseContract(unittest.TestCase):
             root=Path(temporary); self.populate(root)
             name=release.asset_names('0.2.0')[0]
             (root/name).write_bytes(b'tampered')
-            with self.assertRaises(ValueError): release.manifest(root,'0.2.0','')
+            with self.assertRaises(ValueError): release.manifest(root,'0.2.0',NOTES)
             self.populate(root)
             (root/'private.key').write_text('never publish')
-            with self.assertRaises(ValueError): release.manifest(root,'0.2.0','')
+            with self.assertRaises(ValueError): release.manifest(root,'0.2.0',NOTES)
 
     def test_per_platform_validation_rejects_incomplete_or_extra_files(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -46,3 +48,11 @@ class ReleaseContract(unittest.TestCase):
             release.validate_assets(root,'0.2.0',('windows-x64',))
             (root/release.asset_names('0.2.0',('windows-x64',))[0]).unlink()
             with self.assertRaises(ValueError): release.validate_assets(root,'0.2.0',('windows-x64',))
+
+    def test_release_notes_require_both_languages_and_inline_quarantine_commands(self):
+        release.validate_notes(NOTES)
+        for incomplete in [NOTES.replace('## 中文', '## zh'), NOTES.replace('## English', '## en'),
+                           NOTES.replace('xattr -dr com.apple.quarantine /Applications/RPCRad.app', '[see install guide](INSTALL.md)'),
+                           NOTES.replace('open /Applications/RPCRad.app', '')]:
+            with self.subTest(notes=incomplete[:40]), self.assertRaises(ValueError):
+                release.validate_notes(incomplete)

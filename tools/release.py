@@ -61,7 +61,18 @@ def validate_assets(assets, value, targets=PLATFORMS):
             if path.is_symlink() or not path.is_file() or not path.stat().st_size: raise ValueError('Invalid release asset')
             if (assets/(name+'.sha256')).read_text(encoding='utf-8').strip() != f'{checksum(path)}  {name}': raise ValueError(f'SHA-256 does not match {name}')
 
+def validate_notes(notes):
+    for language in ('中文', 'English'):
+        section = re.search(r'^## ' + language + r'\s*\n(.*?)(?=^## |\Z)', notes, re.M | re.S)
+        if not section or len(section.group(1).strip()) < 80:
+            raise ValueError(f'Release notes require a substantive {language} section')
+        blocks = re.findall(r'^```(?:sh|bash)?\s*\n(.*?)^```', section.group(1), re.M | re.S)
+        required = {'xattr -dr com.apple.quarantine /Applications/RPCRad.app', 'open /Applications/RPCRad.app'}
+        if not any(required <= {line.strip() for line in block.splitlines()} for block in blocks):
+            raise ValueError(f'{language} release notes must include the xattr and open commands directly')
+
 def manifest(assets, value, notes):
+    validate_notes(notes)
     validate_assets(assets, value)
     return dict(version=value, pub_date=datetime.now(timezone.utc).isoformat(timespec='seconds').replace('+00:00','Z'), notes=notes,
         platforms={}, # Reserved for a future verified automatic installer; all current clients open the release page.
@@ -174,9 +185,10 @@ def main():
     parser.add_argument('--skip-build',action='store_true')
     args = parser.parse_args()
     value = version(); validate_tag(args.tag,value)
+    notes=(ROOT/'docs/releases'/f'{args.tag}.md').read_text(encoding='utf-8')
+    validate_notes(notes)
     assets = ROOT/'release-assets'/args.tag; assets.mkdir(parents=True,exist_ok=True)
     if args.manifest_only:
-        notes=(ROOT/'docs/releases'/f'{args.tag}.md').read_text(encoding='utf-8')
         (assets/'latest.json').write_text(json.dumps(manifest(assets,value,notes),ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
         print(f'Validated complete multi-platform release: {assets}')
         return

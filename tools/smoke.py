@@ -25,7 +25,8 @@ def run(app, gui, data):
         if 'PASS:' not in result.stdout:
             raise RuntimeError(f'{arg}: no success marker')
     if gui:
-        for code, label in [('zh-CN', '简体中文'), ('en', 'English'), (None, 'English')]:
+        languages = [('zh-CN', '简体中文'), ('en', 'English'), ('ja', '日本語'), ('ko', '한국어'), ('fr', 'Français'), ('de', 'Deutsch'), ('ru', 'Русский')]
+        for code, label in [item for language in languages for item in [language, (None, language[1])]]:
             marker = data/'rendered.txt'
             marker.unlink(missing_ok=True)
             env['RPCRAD_UI_SMOKE_MARKER'] = str(marker)

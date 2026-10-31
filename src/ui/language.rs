@@ -1,6 +1,76 @@
 use super::*;
 use gpui_kit::component::menu::PopupMenuItem;
 
+// GPUI's built-in input menus only ship a subset of our supported languages.
+fn input_menu(
+    menu: gpui_kit::component::native_menu::NativeMenu,
+    capabilities: gpui_kit::base::input::InputContextMenuCapabilities,
+) -> gpui_kit::component::native_menu::NativeMenu {
+    use gpui_kit::base::input::{Copy, Cut, GoToDefinition, Paste, SelectAll, ToggleCodeActions};
+    let enabled = !capabilities.is_disabled();
+    let editable = enabled && !capabilities.is_readonly();
+    let menu = if capabilities.is_code_editor() {
+        menu.menu_with_disabled(
+            tr!("Go to definition"),
+            !(enabled && capabilities.has_definition()),
+            Box::new(GoToDefinition),
+        )
+        .menu_with_disabled(
+            tr!("Show code actions"),
+            !(editable && capabilities.has_code_actions()),
+            Box::new(ToggleCodeActions),
+        )
+        .separator()
+    } else {
+        menu
+    };
+    menu.menu_with_disabled(
+        tr!("Cut"),
+        !(editable && capabilities.is_copyable()),
+        Box::new(Cut),
+    )
+    .menu_with_disabled(tr!("Copy"), !capabilities.is_copyable(), Box::new(Copy))
+    .menu_with_disabled(tr!("Paste"), !editable, Box::new(Paste))
+    .separator()
+    .menu(tr!("Select all"), Box::new(SelectAll))
+}
+
+pub(super) fn localized_input(state: &Entity<InputState>) -> Input {
+    let target = state.clone();
+    Input::new(state).context_menu(move |menu, _, cx| {
+        input_menu(menu, target.read(cx).context_menu_capabilities())
+    })
+}
+pub(super) fn localized_editor(state: &Entity<EditorState>) -> Editor {
+    let target = state.clone();
+    Editor::new(state).context_menu(move |menu, _, cx| {
+        input_menu(menu, target.read(cx).context_menu_capabilities())
+    })
+}
+pub(super) fn mask_button(state: &Entity<InputState>, cx: &App) -> Button {
+    let masked = state.read(cx).presentation().is_masked();
+    let target = state.clone();
+    Button::new("toggle-mask")
+        .icon(if masked {
+            IconName::Eye
+        } else {
+            IconName::EyeOff
+        })
+        .accessibility_label(if masked {
+            tr!("Show password")
+        } else {
+            tr!("Hide password")
+        })
+        .xsmall()
+        .text()
+        .tab_stop(false)
+        .on_click(move |_, window, cx| {
+            target.update(cx, |s, cx| {
+                s.set_masked(!s.presentation().is_masked(), window, cx);
+            })
+        })
+}
+
 impl Workbench {
     pub(super) fn language_selector(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let weak = cx.weak_entity();
@@ -8,10 +78,10 @@ impl Workbench {
             .ghost()
             .label(Language::current().label())
             .icon(IconName::ChevronDown)
-            .accessibility_label("语言 / Language")
-            .tooltip("语言 / Language")
+            .accessibility_label(tr!("Language"))
+            .tooltip(tr!("Language"))
             .dropdown_menu(move |mut menu, _, _| {
-                for language in [Language::Chinese, Language::English] {
+                for language in Language::ALL {
                     let target = weak.clone();
                     menu = menu.item(
                         PopupMenuItem::new(language.label())
@@ -41,7 +111,7 @@ impl Workbench {
         self.set_language(
             match language {
                 Language::Chinese => Language::English,
-                Language::English => Language::Chinese,
+                _ => Language::Chinese,
             },
             window,
             cx,
@@ -83,22 +153,18 @@ impl Workbench {
         language.activate();
         crate::install_menus(cx);
         self.search.update(cx, |s, cx| {
-            s.set_placeholder(
-                tr!("搜索服务或方法", "Search services or methods"),
-                window,
-                cx,
-            );
+            s.set_placeholder(tr!("Search services or methods"), window, cx);
         });
         self.token.update(cx, |s, cx| {
-            s.set_placeholder(tr!("输入 Bearer token", "Enter Bearer token"), window, cx);
+            s.set_placeholder(tr!("Enter Bearer token"), window, cx);
         });
         self.environments.refresh_language(window, cx);
         self.plugins.refresh_language(window, cx);
         self.refresh_history(window, cx);
-        self.notice = tr!("界面语言已切换", "Interface language changed").into();
+        self.notice = tr!("Interface language changed").into();
         self.save(cx);
         // Refresh update messages in the newly selected language.
-        self.update_status = tr!("正在检查更新…", "Checking for updates…").into();
+        self.update_status = tr!("Checking for updates…").into();
         self.check_update(cx);
         cx.notify();
     }

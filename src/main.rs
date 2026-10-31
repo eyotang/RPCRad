@@ -15,13 +15,11 @@ use gpui_kit::*;
 fn main() {
     let language =
         std::env::args().find_map(|arg| arg.strip_prefix("--language=").map(str::to_owned));
-    let language = language.map(|code| match code.as_str() {
-        "zh-CN" => i18n::Language::Chinese,
-        "en" => i18n::Language::English,
-        _ => {
-            eprintln!("Unsupported language: {code}. Use --language=zh-CN or --language=en.");
+    let language = language.map(|code| {
+        i18n::Language::from_code(&code).unwrap_or_else(|| {
+            eprintln!("Unsupported language: {code}. Use zh-CN, en, ja, ko, fr, de or ru.");
             std::process::exit(2);
-        }
+        })
     });
     language.unwrap_or_default().activate();
     if std::env::args().any(|arg| arg == "--check-update") {
@@ -146,7 +144,7 @@ fn main() {
                 Err(error) => {
                     eprintln!(
                         "{}",
-                        tr_format!("无法打开 RPCRad: {error}", "Cannot open RPCRad: {error}")
+                        tr_format!("Cannot open RPCRad: {error}", error = error)
                     );
                     if ui_smoke {
                         std::process::exit(1);
@@ -160,9 +158,9 @@ fn main() {
 fn install_menus(_cx: &mut App) {
     #[cfg(target_os = "macos")]
     _cx.set_menus([Menu::new("RPCRad").items([
-        MenuItem::action(tr!("关于 RPCRad…", "About RPCRad…"), ui::About),
-        MenuItem::action(tr!("检查更新…", "Check for updates…"), ui::CheckUpdates),
+        MenuItem::action(tr!("About RPCRad…"), ui::About),
+        MenuItem::action(tr!("Check for updates…"), ui::CheckUpdates),
         MenuItem::separator(),
-        MenuItem::action(tr!("退出 RPCRad", "Quit RPCRad"), ui::Quit),
+        MenuItem::action(tr!("Quit RPCRad"), ui::Quit),
     ])]);
 }
