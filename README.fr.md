@@ -32,7 +32,9 @@ Adaptez le chemin si l’application est installée ailleurs. Il s’agit d’un
 
 ## Langues de l’interface
 
-Le menu des langues en haut propose **简体中文, English, 日本語, 한국어, Français, Deutsch et Русский**. Le changement est immédiat et mémorisé après redémarrage. Les nouveaux espaces et les anciens sans préférence utilisent le chinois simplifié. L’argument `--language=fr` permet aussi de choisir la langue ; codes acceptés : `zh-CN`, `en`, `ja`, `ko`, `fr`, `de`, `ru`.
+Dans **RPCRad → Paramètres… → Langue**, le menu propose **简体中文, English, 日本語, 한국어, Français, Deutsch et Русский**. Le changement est immédiat et mémorisé après redémarrage. Les nouveaux espaces et les anciens sans préférence utilisent le chinois simplifié. L’argument `--language=fr` permet aussi de choisir la langue ; codes acceptés : `zh-CN`, `en`, `ja`, `ko`, `fr`, `de`, `ru`.
+
+Les paramètres s’ouvrent dans une fenêtre distincte et proposent **Suivre le système (par défaut), Clair et Sombre**. Les changements sont immédiats et enregistrés ; le mode système suit les changements d’apparence du système. La recherche de mises à jour et À propos utilisent aussi des fenêtres distinctes. Une nouvelle ouverture ramène la fenêtre existante au premier plan sans remplacer la requête. Ouvrez les paramètres avec **⌘ ,** sur macOS ou **Ctrl+,** sous Windows/Linux ; **Échap** ou **⌘/Ctrl+W** ferme la fenêtre auxiliaire.
 
 Les messages de l’application et les descriptions des plugins intégrés sont traduits. Les noms personnalisés, valeurs des variables, données des requêtes/réponses et instantanés déjà enregistrés restent inchangés. Les messages serveur et plugins tiers sans traduction ne sont pas traduits automatiquement.
 

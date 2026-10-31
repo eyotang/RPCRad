@@ -6,7 +6,11 @@ mod headers;
 use environments::EnvironmentUi;
 mod history;
 mod update;
+mod windows;
+use crate::theme::{Appearance, color};
 use history::HistoryEntry;
+use windows::UtilityKind;
+pub use windows::window_smoke_test;
 mod plugins;
 use crate::rpc::{self, Connection, Event, Method, Reply};
 use gpui_kit::assets::IconName;
@@ -40,7 +44,9 @@ gpui_kit::actions!(
         SearchServices,
         SaveWorkspace,
         About,
-        CheckUpdates
+        CheckUpdates,
+        OpenSettings,
+        CloseUtility
     ]
 );
 const GREEN: u32 = 0x128252;
@@ -64,17 +70,22 @@ fn column() -> Div {
 fn icon(name: IconName) -> Icon {
     Icon::new(name).size(px(16.))
 }
-fn badge(text: impl Into<SharedString>) -> Div {
+fn badge(text: impl Into<SharedString>, cx: &App) -> Div {
     div()
         .px_2()
         .py(px(3.))
         .rounded(px(4.))
-        .bg(rgb(0xeff3f1))
-        .text_color(rgb(MUTED))
+        .bg(color(0xeff3f1, cx))
+        .text_color(color(MUTED, cx))
         .text_size(px(11.))
         .child(text.into())
 }
-fn tab(id: impl Into<ElementId>, label: impl Into<SharedString>, active: bool) -> Stateful<Div> {
+fn tab(
+    id: impl Into<ElementId>,
+    label: impl Into<SharedString>,
+    active: bool,
+    cx: &App,
+) -> Stateful<Div> {
     let label: SharedString = label.into();
     row()
         .id(id)
@@ -86,9 +97,17 @@ fn tab(id: impl Into<ElementId>, label: impl Into<SharedString>, active: bool) -
         .gap_2()
         .cursor_pointer()
         .border_b_2()
-        .border_color(if active { rgb(GREEN) } else { rgb(0xffffff) })
-        .text_color(if active { rgb(GREEN) } else { rgb(MUTED) })
-        .hover(|s| s.bg(rgb(0xf5f8f6)))
+        .border_color(if active {
+            color(GREEN, cx)
+        } else {
+            color(0xffffff, cx)
+        })
+        .text_color(if active {
+            color(GREEN, cx)
+        } else {
+            color(MUTED, cx)
+        })
+        .hover(|s| s.bg(color(0xf5f8f6, cx)))
         .child(label)
 }
 
@@ -96,6 +115,8 @@ fn tab(id: impl Into<ElementId>, label: impl Into<SharedString>, active: bool) -
 struct Saved {
     #[serde(default)]
     language: Language,
+    #[serde(default)]
+    appearance: Appearance,
     endpoint: String,
     tls: bool,
     timeout: u64,
@@ -113,7 +134,9 @@ struct Saved {
 pub struct Workbench {
     environments: EnvironmentUi,
     environments_open: bool,
-    about_open: bool,
+    appearance: Appearance,
+    main_window: AnyWindowHandle,
+    utility_windows: [Option<AnyWindowHandle>; 3],
     plugins: PluginUi,
     methods: Vec<Method>,
     protos: Vec<PathBuf>,
@@ -176,6 +199,7 @@ impl Workbench {
             .unwrap_or_default();
         language.unwrap_or(saved.language).activate();
         crate::install_menus(cx);
+        saved.appearance.apply(window, cx);
         let protos = if saved.protos.is_empty() && saved.methods.is_empty() {
             example_protos()
         } else {
@@ -248,6 +272,14 @@ impl Workbench {
         let history_editor = cx.new(|cx| EditorState::new(window, cx).language("json"));
         let response = cx.new(|cx| EditorState::new(window, cx).language("json"));
         let mut subscriptions = Vec::new();
+        subscriptions.push(cx.observe_window_appearance(window, |this, window, cx| {
+            if this.appearance == Appearance::System {
+                let mode = this.appearance.mode(window.appearance());
+                if gpui_kit::component::Theme::global(cx).mode != mode {
+                    crate::theme::apply_mode(mode, cx);
+                }
+            }
+        }));
         for input in [&endpoint, &search] {
             subscriptions.push(cx.subscribe(input, |this, _, event: &InputEvent, cx| {
                 if matches!(event, InputEvent::Change) {
@@ -302,7 +334,12 @@ impl Workbench {
         .detach();
         let weak = cx.weak_entity();
         window.on_window_should_close(cx, move |_, cx| {
-            let _ = weak.update(cx, |this, cx| this.save(cx));
+            let _ = weak.update(cx, |this, cx| {
+                this.save(cx);
+                for handle in this.utility_windows.iter().flatten() {
+                    let _ = handle.update(cx, |_, window, _| window.remove_window());
+                }
+            });
             true
         });
         let plugins = PluginUi::new(saved.plugin, window, cx);
@@ -329,7 +366,9 @@ impl Workbench {
             timeout: if saved.timeout == 0 { 5 } else { saved.timeout },
             request_tab: 0,
             response_tab: 0,
-            about_open: false,
+            appearance: saved.appearance,
+            main_window: window.window_handle(),
+            utility_windows: [None; 3],
             history_mode: false,
             history_open: false,
             history: vec![],
@@ -364,6 +403,7 @@ impl Workbench {
         }
         let saved = Saved {
             language: Language::current(),
+            appearance: self.appearance,
             endpoint: self.endpoint.read(cx).value().to_string(),
             tls: self.tls,
             timeout: self.timeout,
@@ -402,7 +442,6 @@ impl Workbench {
         }
         self.save(cx);
         self.history_detail = None;
-        self.about_open = false;
         self.environments_open = false;
         self.plugins.invalidate();
         self.selected = index;
@@ -458,7 +497,7 @@ impl Workbench {
         })
     }
     fn send(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.history_detail.is_some() || self.about_open || self.environments_open {
+        if self.history_detail.is_some() || self.environments_open {
             return;
         }
         if self.busy {
@@ -731,9 +770,9 @@ impl Workbench {
     fn workspace(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let mut tabs = row()
             .h(px(42.))
-            .bg(rgb(SURFACE))
+            .bg(color(SURFACE, cx))
             .border_b_1()
-            .border_color(rgb(BORDER))
+            .border_color(color(BORDER, cx))
             .px_2()
             .gap_1();
         for &index in &self.tabs {
@@ -750,19 +789,19 @@ impl Workbench {
                         .cursor_pointer()
                         .border_t_2()
                         .border_color(if index == self.selected {
-                            rgb(GREEN)
+                            color(GREEN, cx)
                         } else {
-                            rgb(SURFACE)
+                            color(SURFACE, cx)
                         })
                         .bg(if index == self.selected {
-                            rgb(0xffffff)
+                            color(0xffffff, cx)
                         } else {
-                            rgb(SURFACE)
+                            color(SURFACE, cx)
                         })
                         .text_color(if index == self.selected {
-                            rgb(GREEN)
+                            color(GREEN, cx)
                         } else {
-                            rgb(MUTED)
+                            color(MUTED, cx)
                         })
                         .child(icon(if method.server_stream {
                             IconName::Activity
@@ -822,16 +861,20 @@ impl Workbench {
                     .h(px(58.))
                     .px_5()
                     .gap_3()
-                    .child(div().text_color(rgb(GREEN)).child(icon(IconName::GitFork)))
+                    .child(
+                        div()
+                            .text_color(color(GREEN, cx))
+                            .child(icon(IconName::GitFork)),
+                    )
                     .child(div().font_weight(FontWeight::SEMIBOLD).child(title))
-                    .child(badge(kind))
+                    .child(badge(kind, cx))
                     .child(div().flex_1())
                     .child(
                         Button::new("favorite-toggle")
                             .ghost()
                             .small()
                             .icon(IconName::Star)
-                            .when(favorite, |s| s.text_color(rgb(GREEN)))
+                            .when(favorite, |s| s.text_color(color(GREEN, cx)))
                             .tooltip(tr!("Favorite this method"))
                             .on_click(cx.listener(|this, _, _, cx| {
                                 if let Some(method) = this.current() {
@@ -850,7 +893,7 @@ impl Workbench {
                     .px_5()
                     .pb_4()
                     .gap_2()
-                    .child(badge("gRPC"))
+                    .child(badge("gRPC", cx))
                     .child(
                         div()
                             .flex_1()
@@ -913,7 +956,7 @@ impl Workbench {
                     .min_h_0()
                     .mx_4()
                     .border_1()
-                    .border_color(rgb(BORDER))
+                    .border_color(color(BORDER, cx))
                     .rounded(px(8.))
                     .overflow_hidden()
                     .child(
@@ -936,7 +979,7 @@ impl Workbench {
                     .mx_4()
                     .my_3()
                     .border_1()
-                    .border_color(rgb(BORDER))
+                    .border_color(color(BORDER, cx))
                     .rounded(px(6.))
                     .overflow_hidden()
                     .child(
@@ -954,10 +997,10 @@ impl Workbench {
                                 IconName::ChevronRight
                             }))
                             .child(tr!("Call history"))
-                            .child(badge(self.history.len().to_string()))
+                            .child(badge(self.history.len().to_string(), cx))
                             .child(div().flex_1())
                             .child(
-                                div().text_xs().text_color(rgb(MUTED)).child(
+                                div().text_xs().text_color(color(MUTED, cx)).child(
                                     self.history
                                         .first()
                                         .map(|h| {
@@ -993,7 +1036,7 @@ impl Workbench {
                                             h.reply.status
                                         ))
                                         .cursor_pointer()
-                                        .hover(|s| s.bg(rgb(0xeaf0ec)))
+                                        .hover(|s| s.bg(color(0xeaf0ec, cx)))
                                         .on_click(cx.listener(move |this, _, window, cx| {
                                             this.open_history(index, window, cx)
                                         }))
@@ -1001,7 +1044,7 @@ impl Workbench {
                                         .py_2()
                                         .gap_4()
                                         .border_t_1()
-                                        .border_color(rgb(BORDER))
+                                        .border_color(color(BORDER, cx))
                                         .text_xs()
                                         .child(h.time_label())
                                         .child(h.method.clone())
@@ -1021,8 +1064,6 @@ impl Render for Workbench {
         let sidebar = self.sidebar(cx).into_any_element();
         let workspace = if self.environments_open {
             self.environments_panel(cx).into_any_element()
-        } else if self.about_open {
-            self.about_panel(cx).into_any_element()
         } else if self.history_detail.is_some() {
             self.history_panel(cx).into_any_element()
         } else {
@@ -1030,8 +1071,8 @@ impl Render for Workbench {
         };
         column()
             .size_full()
-            .bg(rgb(0xffffff))
-            .text_color(rgb(INK))
+            .bg(color(0xffffff, cx))
+            .text_color(color(INK, cx))
             .text_size(px(13.))
             .font_family(if cfg!(target_os = "macos") {
                 ".SystemUIFont"
@@ -1059,7 +1100,7 @@ impl Render for Workbench {
                     .px_5()
                     .gap_3()
                     .border_b_1()
-                    .border_color(rgb(BORDER))
+                    .border_color(color(BORDER, cx))
                     .child(img("brand/logo.png").size(px(42.)).flex_shrink_0())
                     .child(
                         div()
@@ -1070,7 +1111,7 @@ impl Render for Workbench {
                     )
                     .child(
                         div()
-                            .text_color(rgb(MUTED))
+                            .text_color(color(MUTED, cx))
                             .text_size(px(11.))
                             .child("RPCRad"),
                     )
@@ -1084,6 +1125,7 @@ impl Render for Workbench {
                                 .accessibility_label(tr!("RPCRad menu"))
                                 .dropdown_menu(|menu, _, _| {
                                     menu.menu(tr!("About RPCRad…"), Box::new(About))
+                                        .menu(tr!("Settings…"), Box::new(OpenSettings))
                                         .menu(tr!("Check for updates…"), Box::new(CheckUpdates))
                                         .separator()
                                         .menu(tr!("Quit RPCRad"), Box::new(Quit))
@@ -1096,11 +1138,10 @@ impl Render for Workbench {
                                 .ghost()
                                 .label(tr_format!("Update {}", release.version))
                                 .on_click(cx.listener(|this, _, _, cx| {
-                                    this.show_about(false, cx);
+                                    this.open_utility(UtilityKind::Updates, cx);
                                 })),
                         )
                     })
-                    .child(self.language_selector(cx))
                     .child(self.environment_selector(cx))
                     .child(
                         Button::new("manage-variables")
@@ -1125,13 +1166,10 @@ impl Render for Workbench {
                         Button::new("settings")
                             .ghost()
                             .icon(IconName::Settings)
-                            .tooltip(tr!("Settings and updates"))
+                            .tooltip(tr!("Settings"))
+                            .accessibility_label(tr!("Settings"))
                             .on_click(cx.listener(|this, _, _, cx| {
-                                this.about_open = false;
-                                this.history_detail = None;
-                                this.environments_open = false;
-                                this.request_tab = 3;
-                                cx.notify();
+                                this.open_utility(UtilityKind::Settings, cx);
                             })),
                     ),
             )
@@ -1153,11 +1191,11 @@ impl Render for Workbench {
                     .px_4()
                     .gap_3()
                     .border_t_1()
-                    .border_color(rgb(BORDER))
-                    .bg(rgb(SURFACE))
+                    .border_color(color(BORDER, cx))
+                    .bg(color(SURFACE, cx))
                     .text_size(px(10.))
-                    .text_color(rgb(MUTED))
-                    .child(div().text_color(rgb(GREEN)).child("●"))
+                    .text_color(color(MUTED, cx))
+                    .child(div().text_color(color(GREEN, cx)).child("●"))
                     .child(if self.discovering {
                         tr!("Loading services").to_string()
                     } else {
@@ -1167,7 +1205,7 @@ impl Render for Workbench {
                             self.methods.len()
                         )
                     })
-                    .child(div().w(px(1.)).h(px(10.)).bg(rgb(BORDER)))
+                    .child(div().w(px(1.)).h(px(10.)).bg(color(BORDER, cx)))
                     .child(div().flex_1().overflow_hidden().child(self.notice.clone()))
                     .child(if self.dirty_since.is_some() {
                         tr!("Saving…")
@@ -1355,7 +1393,7 @@ impl Workbench {
                 row()
                     .px_2()
                     .py_3()
-                    .text_color(rgb(MUTED))
+                    .text_color(color(MUTED, cx))
                     .text_xs()
                     .child(tr!("This session"))
                     .child(div().flex_1())
@@ -1365,7 +1403,7 @@ impl Workbench {
                 tree = tree.child(
                     div()
                         .p_3()
-                        .text_color(rgb(MUTED))
+                        .text_color(color(MUTED, cx))
                         .child(tr!("Sent requests appear here.")),
                 );
             }
@@ -1383,15 +1421,15 @@ impl Workbench {
                         .gap_1()
                         .rounded_md()
                         .cursor_pointer()
-                        .hover(|s| s.bg(rgb(0xeaf0ec)))
+                        .hover(|s| s.bg(color(0xeaf0ec, cx)))
                         .child(
                             div()
                                 .text_xs()
-                                .text_color(rgb(MUTED))
+                                .text_color(color(MUTED, cx))
                                 .child(entry.time_label()),
                         )
                         .child(entry.method.rsplit('/').next().unwrap_or("").to_string())
-                        .child(div().text_xs().text_color(rgb(MUTED)).child(format!(
+                        .child(div().text_xs().text_color(color(MUTED, cx)).child(format!(
                             "{} · {} ms",
                             entry.reply.status, entry.reply.elapsed_ms
                         )))
@@ -1408,9 +1446,9 @@ impl Workbench {
                     .pb_2()
                     .justify_between()
                     .text_size(px(10.))
-                    .text_color(rgb(MUTED))
+                    .text_color(color(MUTED, cx))
                     .child("PROTO / SERVICES")
-                    .child(badge(self.methods.len().to_string())),
+                    .child(badge(self.methods.len().to_string(), cx)),
             );
             let mut files: Vec<String> = self
                 .methods
@@ -1481,7 +1519,7 @@ impl Workbench {
                                 .mb_1()
                                 .gap_1()
                                 .child(
-                                    div().text_size(px(10.)).text_color(rgb(MUTED)).child(
+                                    div().text_size(px(10.)).text_color(color(MUTED, cx)).child(
                                         method
                                             .service
                                             .rsplit_once('.')
@@ -1516,24 +1554,24 @@ impl Workbench {
                             .gap_2()
                             .rounded(px(5.))
                             .bg(if self.selected == index {
-                                rgb(0xe0f0e7)
+                                color(0xe0f0e7, cx)
                             } else {
-                                rgb(SURFACE)
+                                color(SURFACE, cx)
                             })
                             .text_color(if self.selected == index {
-                                rgb(0x096c42)
+                                color(0x096c42, cx)
                             } else {
-                                rgb(INK)
+                                color(INK, cx)
                             })
                             .cursor_pointer()
-                            .hover(|s| s.bg(rgb(0xe8efea)))
+                            .hover(|s| s.bg(color(0xe8efea, cx)))
                             .child(icon(if method.server_stream {
                                 IconName::Activity
                             } else {
                                 IconName::GitFork
                             }))
                             .child(div().flex_1().text_size(px(12.)).child(method.name.clone()))
-                            .child(div().text_size(px(9.)).text_color(rgb(MUTED)).child(
+                            .child(div().text_size(px(9.)).text_color(color(MUTED, cx)).child(
                                 if method.server_stream {
                                     "Stream"
                                 } else {
@@ -1553,9 +1591,9 @@ impl Workbench {
                     .pt_4()
                     .px_2()
                     .border_t_1()
-                    .border_color(rgb(BORDER))
+                    .border_color(color(BORDER, cx))
                     .gap_2()
-                    .text_color(rgb(MUTED))
+                    .text_color(color(MUTED, cx))
                     .child(icon(IconName::Star))
                     .child(tr!("Favorites")),
             );
@@ -1565,7 +1603,7 @@ impl Workbench {
                         .px_2()
                         .py_2()
                         .text_size(px(11.))
-                        .text_color(rgb(MUTED))
+                        .text_color(color(MUTED, cx))
                         .child(tr!("Click ☆ next to a method to add a favorite")),
                 );
             }
@@ -1582,7 +1620,7 @@ impl Workbench {
                         .gap_2()
                         .cursor_pointer()
                         .rounded_md()
-                        .hover(|s| s.bg(rgb(0xe8efea)))
+                        .hover(|s| s.bg(color(0xe8efea, cx)))
                         .child(icon(IconName::Bookmark))
                         .child(method.name.clone())
                         .on_click(
@@ -1593,9 +1631,9 @@ impl Workbench {
         }
         column()
             .size_full()
-            .bg(rgb(SURFACE))
+            .bg(color(SURFACE, cx))
             .border_r_1()
-            .border_color(rgb(BORDER))
+            .border_color(color(BORDER, cx))
             .child(
                 row()
                     .p_3()
@@ -1632,6 +1670,7 @@ impl Workbench {
                 row()
                     .px_3()
                     .gap_2()
+                    .flex_wrap()
                     .child(
                         Button::new("import")
                             .small()
@@ -1657,38 +1696,42 @@ impl Workbench {
                     .p_4()
                     .gap_2()
                     .border_t_1()
-                    .border_color(rgb(BORDER))
+                    .border_color(color(BORDER, cx))
                     .child(
                         row()
                             .gap_2()
                             .child(icon(IconName::Folder))
                             .child(tr!("Local workspace"))
                             .child(div().flex_1())
-                            .child(div().text_color(rgb(GREEN)).child(icon(IconName::Check))),
+                            .child(
+                                div()
+                                    .text_color(color(GREEN, cx))
+                                    .child(icon(IconName::Check)),
+                            ),
                     )
                     .child(
                         div()
                             .text_size(px(10.))
-                            .text_color(rgb(MUTED))
+                            .text_color(color(MUTED, cx))
                             .child(tr!("Requests saved automatically · No sign-in")),
                     ),
             )
     }
 
     fn request_panel(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let mut tabs = row().border_b_1().border_color(rgb(BORDER));
+        let mut tabs = row().border_b_1().border_color(color(BORDER, cx));
         for (index, label) in [
             tr!("Body"),
             "Metadata",
             tr!("Auth"),
-            tr!("Settings"),
+            tr!("Connection"),
             tr!("Plugins"),
         ]
         .into_iter()
         .enumerate()
         {
             tabs = tabs.child(
-                tab(("request-tab", index), label, self.request_tab == index).on_click(
+                tab(("request-tab", index), label, self.request_tab == index, cx).on_click(
                     cx.listener(move |this, _, _, cx| {
                         this.request_tab = index;
                         cx.notify();
@@ -1705,8 +1748,8 @@ impl Workbench {
                         .px_4()
                         .gap_2()
                         .border_b_1()
-                        .border_color(rgb(0xf0f3f1))
-                        .child(div().text_xs().text_color(rgb(MUTED)).child("JSON"))
+                        .border_color(color(0xf0f3f1, cx))
+                        .child(div().text_xs().text_color(color(MUTED, cx)).child("JSON"))
                         .child(div().flex_1())
                         .when(self.request_tab == 0, |s| {
                             s.child(
@@ -1763,7 +1806,7 @@ impl Workbench {
                     )
                     .child(
                         div()
-                            .text_color(rgb(MUTED))
+                            .text_color(color(MUTED, cx))
                             .text_sm()
                             .child(tr!("Sent as authorization metadata with each request.")),
                     )
@@ -1771,7 +1814,7 @@ impl Workbench {
                     .child(
                         div()
                             .text_xs()
-                            .text_color(rgb(MUTED))
+                            .text_color(color(MUTED, cx))
                             .child(tr!("Authentication is kept only for this session.")),
                     ),
             );
@@ -1797,7 +1840,7 @@ impl Workbench {
                     .child(
                         div()
                             .text_xs()
-                            .text_color(rgb(MUTED))
+                            .text_color(color(MUTED, cx))
                             .child(tr!("Verify the server certificate using system-trusted CAs.")),
                     )
                     .child(
@@ -1818,19 +1861,19 @@ impl Workbench {
                     .child(
                         div()
                             .text_xs()
-                            .text_color(rgb(MUTED))
+                            .text_color(color(MUTED, cx))
                             .child(tr!("Click to cycle through 5 / 15 / 30 seconds. Also applies to streams.")),
                     )
                     .child(
                         div()
                             .border_t_1()
-                            .border_color(rgb(BORDER))
+                            .border_color(color(BORDER, cx))
                             .pt_4()
                             .text_xs()
-                            .text_color(rgb(MUTED))
+                            .text_color(color(MUTED, cx))
                             .child(tr!("Supports unary and server streaming. mTLS, client and bidirectional streaming are not yet available.")),
                     )
-                    .child(self.update_panel(cx)),
+                    ,
             );
         }
         let variables = self.environments.snapshot(cx);
@@ -1840,7 +1883,7 @@ impl Workbench {
         let valid = validation.is_ok();
         column()
             .size_full()
-            .bg(rgb(0xffffff))
+            .bg(color(0xffffff, cx))
             .child(tabs)
             .child(content)
             .child(
@@ -1872,40 +1915,46 @@ impl Workbench {
             .h(px(40.))
             .px_2()
             .border_b_1()
-            .border_color(rgb(0xf0f3f1));
+            .border_color(color(0xf0f3f1, cx));
         for (index, label) in [tr!("Messages"), "Headers", "Trailers"]
             .into_iter()
             .enumerate()
         {
             tabs = tabs.child(
-                tab(("response-tab", index), label, self.response_tab == index)
-                    .h(px(40.))
-                    .on_click(cx.listener(move |this, _, window, cx| {
-                        this.response_tab = index;
-                        this.refresh_response(window, cx);
-                        cx.notify();
-                    })),
+                tab(
+                    ("response-tab", index),
+                    label,
+                    self.response_tab == index,
+                    cx,
+                )
+                .h(px(40.))
+                .on_click(cx.listener(move |this, _, window, cx| {
+                    this.response_tab = index;
+                    this.refresh_response(window, cx);
+                    cx.notify();
+                })),
             );
         }
         tabs =
-            tabs.child(div().flex_1())
-                .child(div().pr_3().text_xs().text_color(rgb(MUTED)).child(
+            tabs.child(div().flex_1()).child(
+                div().pr_3().text_xs().text_color(color(MUTED, cx)).child(
                     if self.response_tab == 0 {
                         "JSON"
                     } else {
                         "TEXT"
                     },
-                ));
+                ),
+            );
         column()
             .size_full()
-            .bg(rgb(0xffffff))
+            .bg(color(0xffffff, cx))
             .child(
                 row()
                     .h(px(44.))
                     .px_4()
                     .gap_3()
                     .border_b_1()
-                    .border_color(rgb(BORDER))
+                    .border_color(color(BORDER, cx))
                     .child(
                         div()
                             .font_weight(FontWeight::SEMIBOLD)
@@ -1925,7 +1974,7 @@ impl Workbench {
                         s.child(
                             div()
                                 .text_xs()
-                                .text_color(rgb(MUTED))
+                                .text_color(color(MUTED, cx))
                                 .child(format!("{} ms", self.reply.elapsed_ms)),
                         )
                     })
@@ -1933,7 +1982,7 @@ impl Workbench {
                         s.child(
                             div()
                                 .text_xs()
-                                .text_color(rgb(MUTED))
+                                .text_color(color(MUTED, cx))
                                 .child(format!("{} B", self.reply.bytes)),
                         )
                     })
@@ -1971,11 +2020,11 @@ impl Workbench {
                                         div()
                                             .size(px(48.))
                                             .rounded(px(12.))
-                                            .bg(rgb(0xf0f6f2))
+                                            .bg(color(0xf0f6f2, cx))
                                             .flex()
                                             .items_center()
                                             .justify_center()
-                                            .text_color(rgb(GREEN))
+                                            .text_color(color(GREEN, cx))
                                             .child(
                                                 Icon::new(IconName::ArrowDownToLine).size(px(22.)),
                                             ),
@@ -1985,13 +2034,21 @@ impl Workbench {
                                             .font_weight(FontWeight::MEDIUM)
                                             .child(tr!("Ready for a response")),
                                     )
-                                    .child(div().text_size(px(12.)).text_color(rgb(MUTED)).child(
-                                        tr!("Send a request to view the server response here"),
-                                    ))
-                                    .child(badge(platform_text(
-                                        tr!("⌘ Enter to send"),
-                                        tr!("Ctrl Enter to send"),
-                                    ))),
+                                    .child(
+                                        div()
+                                            .text_size(px(12.))
+                                            .text_color(color(MUTED, cx))
+                                            .child(tr!(
+                                                "Send a request to view the server response here"
+                                            )),
+                                    )
+                                    .child(badge(
+                                        platform_text(
+                                            tr!("⌘ Enter to send"),
+                                            tr!("Ctrl Enter to send"),
+                                        ),
+                                        cx,
+                                    )),
                             )
                         },
                     )
@@ -2015,7 +2072,7 @@ impl Workbench {
                     .px_4()
                     .gap_2()
                     .text_size(px(11.))
-                    .text_color(rgb(MUTED))
+                    .text_color(color(MUTED, cx))
                     .child(icon(if self.busy {
                         IconName::Activity
                     } else {

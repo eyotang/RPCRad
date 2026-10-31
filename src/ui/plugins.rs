@@ -304,7 +304,7 @@ impl Workbench {
             .child(
                 div()
                     .text_xs()
-                    .text_color(rgb(MUTED))
+                    .text_color(color(MUTED, cx))
                     .child(tr!("Applies to all RPC calls in this workspace. Server reflection uses the original metadata.")),
             );
         let mut choices = row().flex_wrap().gap_2();
@@ -340,7 +340,7 @@ impl Workbench {
             panel = panel.child(
                 div()
                     .text_sm()
-                    .text_color(rgb(MUTED))
+                    .text_color(color(MUTED, cx))
                     .child(plugin.manifest.description().to_owned()),
             );
             for (index, field) in plugin.manifest.fields.iter().enumerate() {
@@ -411,7 +411,7 @@ impl Workbench {
                             ),
                         ),
                 )
-                .child(div().text_xs().text_color(rgb(MUTED)).child(tr_format!(
+                .child(div().text_xs().text_color(color(MUTED, cx)).child(tr_format!(
                     "Key encoding: {}. Raw secrets are not saved; {{{{secret}}}} references are saved. Other fields support {{{{name}}}}.",
                     plugin.manifest.secret_encoding
                 )));
@@ -458,7 +458,7 @@ impl Workbench {
             .child(
                 div()
                     .text_xs()
-                    .text_color(rgb(MUTED))
+                    .text_color(color(MUTED, cx))
                     .child(tr!("Recomputed for every request. Previews are snapshots and are never reused for sending.")),
             );
         if self.plugins.settings.directory.is_some() {
@@ -492,9 +492,12 @@ impl Workbench {
                     panel = panel.child(tr!("Last generated headers"));
                     for (index, (key, value)) in headers.iter().enumerate() {
                         let revealed = self.plugins.revealed.contains(key);
-                        let mut label = row()
-                            .gap_2()
-                            .child(div().text_xs().text_color(rgb(MUTED)).child(key.clone()));
+                        let mut label = row().gap_2().child(
+                            div()
+                                .text_xs()
+                                .text_color(color(MUTED, cx))
+                                .child(key.clone()),
+                        );
                         if super::headers::is_sensitive(key) {
                             let key = key.clone();
                             label = label.child(
@@ -518,14 +521,14 @@ impl Workbench {
                     }
                 }
                 Err(error) => {
-                    panel = panel.child(div().text_color(rgb(0xc35246)).child(error.clone()))
+                    panel = panel.child(div().text_color(color(0xc35246, cx)).child(error.clone()))
                 }
             }
         }
         for error in &self.plugins.errors {
             panel = panel.child(
                 div()
-                    .text_color(rgb(0xc35246))
+                    .text_color(color(0xc35246, cx))
                     .child(tr_format!("Plugin load error: {error}", error = error)),
             );
         }

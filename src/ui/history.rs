@@ -137,7 +137,6 @@ impl Workbench {
         cx: &mut Context<Self>,
     ) {
         if let Some(entry) = self.history.get(index) {
-            self.about_open = false;
             self.environments_open = false;
             self.history_detail = Some(entry.clone());
             self.history_tab = 0;
@@ -178,7 +177,7 @@ impl Workbench {
         cx.notify();
     }
     pub(super) fn history_panel(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let mut panel = column().size_full().min_w_0().bg(rgb(SURFACE));
+        let mut panel = column().size_full().min_w_0().bg(color(SURFACE, cx));
         let Some(entry) = &self.history_detail else {
             return panel;
         };
@@ -209,40 +208,40 @@ impl Workbench {
                     }))
             })
             .collect();
-        panel = panel.child(row().h(px(58.)).px_5().gap_3().border_b_1().border_color(rgb(BORDER))
+        panel = panel.child(row().h(px(58.)).px_5().gap_3().border_b_1().border_color(color(BORDER, cx))
             .child(Button::new("history-back").ghost().label(tr!("Back to requests")).on_click(cx.listener(|this,_,_,cx| {this.history_detail = None; cx.notify();})))
             .child(div().font_weight(FontWeight::SEMIBOLD).child(tr!("Call details")))
-            .child(badge(tr!("Read-only snapshot")))
-            .child(badge(tr_format!("Environment: {}",entry.environment)))
+            .child(badge(tr!("Read-only snapshot"), cx))
+            .child(badge(tr_format!("Environment: {}",entry.environment), cx))
             .child(div().flex_1())
             .child(Button::new("history-load").label(tr!("Load request")).disabled(self.busy || self.discovering)
                 .tooltip(tr!("Load the address, body and connection settings; generate a fresh signature when sending"))
                 .on_click(cx.listener(|this,_,window,cx|this.load_history_request(window,cx)))))
             .child(column().p_5().gap_3()
                 .child(row().gap_3().child(div().font_weight(FontWeight::SEMIBOLD).child(entry.method.clone()))
-                    .child(badge(entry.reply.status.clone())))
-                .child(row().gap_4().text_sm().text_color(rgb(MUTED)).child(entry.endpoint.clone())
+                    .child(badge(entry.reply.status.clone(), cx)))
+                .child(row().gap_4().text_sm().text_color(color(MUTED, cx)).child(entry.endpoint.clone())
                     .child(if entry.tls { tr!("TLS on") } else { tr!("TLS off") })
                     .child(tr_format!("{} ms · {} messages · {} B", entry.reply.elapsed_ms, entry.reply.messages, entry.reply.bytes)))
-                .child(row().gap_4().text_xs().text_color(rgb(MUTED))
+                .child(row().gap_4().text_xs().text_color(color(MUTED, cx))
                     .child(tr_format!("Called at {} (UTC+8)",entry.time_label()))
                     .child(tr_format!("Unix milliseconds {}",entry.started_ms)).child(tr_format!("Timeout {} s",entry.timeout)))
-                .child(row().gap_3().child(badge(entry.plugin.clone().unwrap_or_else(|| tr!("No plugin enabled").into())))
-                    .child(div().text_sm().text_color(rgb(GREEN)).child(entry.changes())))
-                .child(div().text_xs().text_color(rgb(MUTED)).child(if entry.dispatched_headers.is_some() {
+                .child(row().gap_3().child(badge(entry.plugin.clone().unwrap_or_else(|| tr!("No plugin enabled").into()), cx))
+                    .child(div().text_sm().text_color(color(GREEN, cx)).child(entry.changes())))
+                .child(div().text_xs().text_color(color(MUTED, cx)).child(if entry.dispatched_headers.is_some() {
                     tr!("Final headers are the RPC metadata captured when the sender starts, including plugin results. Automatically added HTTP/2 protocol headers are excluded.")
                 } else { tr!("This request was not handed to the sender. Plugin previews are not marked as sent.") })))
-            .child(column().flex_1().min_h_0().mx_5().mb_5().bg(rgb(0xffffff)).border_1().border_color(rgb(BORDER)).rounded_md().overflow_hidden()
+            .child(column().flex_1().min_h_0().mx_5().mb_5().bg(color(0xffffff, cx)).border_1().border_color(color(BORDER, cx)).rounded_md().overflow_hidden()
                 .child({
-                    let mut tabs = row().flex_wrap().border_b_1().border_color(rgb(BORDER));
+                    let mut tabs = row().flex_wrap().border_b_1().border_color(color(BORDER, cx));
                     for (index,label) in [tr!("Sent headers"), tr!("Before plugin"), tr!("Body"), tr!("Response"), tr!("Response headers"), "Trailers"].into_iter().enumerate() {
-                        tabs = tabs.child(tab(("history-tab",index),label,self.history_tab==index)
+                        tabs = tabs.child(tab(("history-tab",index),label,self.history_tab==index, cx)
                             .on_click(cx.listener(move|this,_,window,cx|{this.history_tab=index; this.refresh_history(window,cx); cx.notify();})));
                     }
                     tabs
                 })
-                .child(row().px_4().py_2().min_h(px(42.)).flex_wrap().gap_3().border_b_1().border_color(rgb(BORDER))
-                    .child(div().text_xs().text_color(rgb(MUTED)).child(if self.history_tab <= 1 {
+                .child(row().px_4().py_2().min_h(px(42.)).flex_wrap().gap_3().border_b_1().border_color(color(BORDER, cx))
+                    .child(div().text_xs().text_color(color(MUTED, cx)).child(if self.history_tab <= 1 {
                         tr!("Plain headers are visible. Reveal sensitive fields individually. Copy matches what is shown.")
                     } else { tr!("Original snapshot of this call") }))
                     .child(div().flex_1())
@@ -252,7 +251,7 @@ impl Workbench {
                             if let Some(entry) = &this.history_detail { cx.write_to_clipboard(ClipboardItem::new_string(entry.content(this.history_tab,&this.history_revealed))); }
                         }))))
                 .child(div().flex_1().min_h_0().pt_2().child(localized_editor(&self.history_editor).readonly(true).h(relative(1.)).bordered(false).appearance(false).text_size(px(13.)))))
-            .child(div().px_5().pb_3().text_xs().text_color(rgb(MUTED)).child(tr!("Up to 50 calls are kept for this session only. Plugin secrets are never written to history.")));
+            .child(div().px_5().pb_3().text_xs().text_color(color(MUTED, cx)).child(tr!("Up to 50 calls are kept for this session only. Plugin secrets are never written to history.")));
         panel
     }
 }

@@ -6,10 +6,10 @@ mod assets;
 mod paths;
 mod plugin;
 mod rpc;
+mod theme;
 mod ui;
 mod updater;
 mod variables;
-use gpui_kit::component::{Theme, ThemeMode};
 use gpui_kit::*;
 
 fn main() {
@@ -53,20 +53,14 @@ fn main() {
         .run(move |cx| {
             gpui_kit::init(cx);
             cx.set_app_identity("dev.rpcrad.desktop", "RPCRad");
-            Theme::change(ThemeMode::Light, None, cx);
-            let theme = Theme::global_mut(cx);
-            theme.colors.primary = rgb(0x128252).into();
-            theme.colors.primary_hover = rgb(0x0c7045).into();
-            theme.colors.primary_active = rgb(0x095c38).into();
-            theme.colors.ring = rgb(0x128252).into();
-            theme.tokens.button_primary = Hsla::from(rgb(0x128252)).into();
-            theme.tokens.button_primary_hover = Hsla::from(rgb(0x0c7045)).into();
-            theme.tokens.button_primary_active = Hsla::from(rgb(0x095c38)).into();
-            theme.font_size = px(13.);
-            theme.mono_font_size = px(13.);
-            theme.radius = px(6.);
-            theme.shadow = false;
             cx.bind_keys([
+                KeyBinding::new(ui::platform_text("cmd-,", "ctrl-,"), ui::OpenSettings, None),
+                KeyBinding::new("escape", ui::CloseUtility, Some("UtilityWindow")),
+                KeyBinding::new(
+                    ui::platform_text("cmd-w", "ctrl-w"),
+                    ui::CloseUtility,
+                    Some("UtilityWindow"),
+                ),
                 KeyBinding::new(ui::platform_text("cmd-q", "ctrl-q"), ui::Quit, None),
                 KeyBinding::new(ui::platform_text("cmd-enter", "ctrl-enter"), ui::Send, None),
                 KeyBinding::new(
@@ -102,9 +96,15 @@ fn main() {
                 Ok((window, workbench)) => {
                     if ui_smoke {
                         let checked = window.update(cx, |_, window, cx| {
-                            workbench.update(cx, |this, cx| this.language_smoke_test(window, cx))
+                            workbench.update(cx, |this, cx| {
+                                this.language_smoke_test(window, cx)?;
+                                this.settings_smoke_test(window, cx)
+                            })
                         });
-                        if let Err(error) = checked.and_then(|result| result) {
+                        if let Err(error) = checked
+                            .and_then(|result| result)
+                            .and_then(|_| ui::window_smoke_test(&workbench, cx))
+                        {
                             eprintln!("{error:#}");
                             std::process::exit(1);
                         }
@@ -131,13 +131,15 @@ fn main() {
                     }
                     let about = workbench.downgrade();
                     cx.on_action(move |_: &ui::About, cx| {
-                        let _ = about.update(cx, |view, cx| view.show_about(false, cx));
-                        let _ = window.update(cx, |_, window, _| window.activate_window());
+                        let _ = about.update(cx, |view, cx| view.open_about(cx));
                     });
                     let updates = workbench.downgrade();
                     cx.on_action(move |_: &ui::CheckUpdates, cx| {
-                        let _ = updates.update(cx, |view, cx| view.show_about(true, cx));
-                        let _ = window.update(cx, |_, window, _| window.activate_window());
+                        let _ = updates.update(cx, |view, cx| view.open_updates(cx));
+                    });
+                    let settings = workbench.downgrade();
+                    cx.on_action(move |_: &ui::OpenSettings, cx| {
+                        let _ = settings.update(cx, |view, cx| view.open_settings(cx));
                     });
                     cx.activate(true);
                 }
@@ -159,6 +161,7 @@ fn install_menus(_cx: &mut App) {
     #[cfg(target_os = "macos")]
     _cx.set_menus([Menu::new("RPCRad").items([
         MenuItem::action(tr!("About RPCRad…"), ui::About),
+        MenuItem::action(tr!("Settings…"), ui::OpenSettings),
         MenuItem::action(tr!("Check for updates…"), ui::CheckUpdates),
         MenuItem::separator(),
         MenuItem::action(tr!("Quit RPCRad"), ui::Quit),

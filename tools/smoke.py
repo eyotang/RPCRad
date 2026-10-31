@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Exercise packaged gRPC/signing and optionally two actual native UI frames."""
 import argparse
+import json
 import os
 from pathlib import Path
 import shutil
@@ -26,7 +27,11 @@ def run(app, gui, data):
             raise RuntimeError(f'{arg}: no success marker')
     if gui:
         languages = [('zh-CN', '简体中文'), ('en', 'English'), ('ja', '日本語'), ('ko', '한국어'), ('fr', 'Français'), ('de', 'Deutsch'), ('ru', 'Русский')]
-        for code, label in [item for language in languages for item in [language, (None, language[1])]]:
+        for index, (code, label) in enumerate([item for language in languages for item in [language, (None, language[1])]]):
+            if code and index > 0:
+                workspace = json.loads((data/'workspace.json').read_text(encoding='utf-8'))
+                workspace['appearance'] = ['light', 'dark', 'system'][(index//2) % 3]
+                (data/'workspace.json').write_text(json.dumps(workspace, ensure_ascii=False), encoding='utf-8')
             marker = data/'rendered.txt'
             marker.unlink(missing_ok=True)
             env['RPCRAD_UI_SMOKE_MARKER'] = str(marker)
@@ -38,7 +43,7 @@ def run(app, gui, data):
                 raise RuntimeError(f'Native UI failed: {result.returncode}\n{result.stdout}\n{result.stderr}')
             if marker.read_text(encoding='utf-8') != f'native frames rendered: {label}':
                 raise RuntimeError('Native UI used the wrong language')
-            print(f'PASS: native UI rendered {code or "saved language"}; switching and persistence verified')
+            print(f'PASS: native UI rendered {code or "saved language"}; language/theme persistence and utility windows verified')
 
 def main():
     parser = argparse.ArgumentParser()

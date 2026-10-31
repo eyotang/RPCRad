@@ -125,7 +125,6 @@ impl EnvironmentUi {
 impl Workbench {
     pub(super) fn open_environments(&mut self, cx: &mut Context<Self>) {
         self.environments_open = true;
-        self.about_open = false;
         self.history_detail = None;
         cx.notify();
     }
@@ -236,11 +235,11 @@ impl Workbench {
             .gap_2()
             .p_4()
             .border_r_1()
-            .border_color(rgb(BORDER))
+            .border_color(color(BORDER, cx))
             .child(
                 div()
                     .text_xs()
-                    .text_color(rgb(MUTED))
+                    .text_color(color(MUTED, cx))
                     .child(tr!("Variable scope")),
             );
         for (index, (id, name)) in std::iter::once((None, tr!("Global variables").to_string()))
@@ -317,14 +316,14 @@ impl Workbench {
             );
         }
         editor = editor
-            .child(div().text_sm().text_color(rgb(MUTED)).child(
+            .child(div().text_sm().text_color(color(MUTED, cx)).child(
                 tr!("Reference values with {{name}}. Environment variables override globals with the same name. Without an environment, only globals are used."),
             ))
             .child(
                 row()
                     .gap_3()
                     .text_xs()
-                    .text_color(rgb(MUTED))
+                    .text_color(color(MUTED, cx))
                     .child(div().w(px(180.)).child(tr!("Name")))
                     .child(div().flex_1().child(tr!("Value")))
                     .child(div().w(px(158.)).child(tr!("Storage"))),
@@ -384,15 +383,19 @@ impl Workbench {
             );
         }
         if self.environments.rows.is_empty() {
-            rows = rows.child(div().py_6().text_color(rgb(MUTED)).child(
+            rows = rows.child(div().py_6().text_color(color(MUTED, cx)).child(
                 tr!("No variables yet. Add endpoint, appid or user_id and set their values for each environment."),
             ));
         }
         editor=editor.child(rows).child(Button::new("add-variable").ghost().icon(IconName::Plus).label(tr!("Add variable"))
             .on_click(cx.listener(|this,_,window,cx|this.add_variable(window,cx))))
-            .child(div().text_xs().text_color(rgb(MUTED)).child(tr!("Use variables in the address, metadata, Bearer token, plugin settings and Secret. In bodies, use \"{{user_id}}\" for strings and {{page_size}} for numbers or JSON. Sensitive values last only for this session.")));
+            .child(div().text_xs().text_color(color(MUTED, cx)).child(tr!("Use variables in the address, metadata, Bearer token, plugin settings and Secret. In bodies, use \"{{user_id}}\" for strings and {{page_size}} for numbers or JSON. Sensitive values last only for this session.")));
         if let Err(error) = data.resolver() {
-            editor = editor.child(div().text_color(rgb(0xc35246)).child(error.to_string()));
+            editor = editor.child(
+                div()
+                    .text_color(color(0xc35246, cx))
+                    .child(error.to_string()),
+            );
         }
         column()
             .size_full()
@@ -402,7 +405,7 @@ impl Workbench {
                     .px_5()
                     .gap_3()
                     .border_b_1()
-                    .border_color(rgb(BORDER))
+                    .border_color(color(BORDER, cx))
                     .child(
                         Button::new("environment-back")
                             .ghost()
@@ -419,7 +422,7 @@ impl Workbench {
                             .child(tr!("Environments and variables")),
                     )
                     .child(div().flex_1())
-                    .child(badge(tr!("Autosaved"))),
+                    .child(badge(tr!("Autosaved"), cx)),
             )
             .child(
                 row()

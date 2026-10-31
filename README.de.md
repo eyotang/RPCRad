@@ -32,7 +32,9 @@ Bei einem anderen Installationsort den Pfad anpassen. Dies dient der optionalen 
 
 ## Oberflächensprachen
 
-Die Sprachauswahl oben bietet **简体中文, English, 日本語, 한국어, Français, Deutsch und Русский**. Änderungen wirken sofort und bleiben nach einem Neustart erhalten. Neue und ältere Arbeitsbereiche ohne Sprachwahl verwenden vereinfachtes Chinesisch. Auch `--language=de` ist möglich; unterstützt werden `zh-CN`, `en`, `ja`, `ko`, `fr`, `de`, `ru`.
+Unter **RPCRad → Einstellungen… → Sprache** bietet die Sprachauswahl **简体中文, English, 日本語, 한국어, Français, Deutsch und Русский**. Änderungen wirken sofort und bleiben nach einem Neustart erhalten. Neue und ältere Arbeitsbereiche ohne Sprachwahl verwenden vereinfachtes Chinesisch. Auch `--language=de` ist möglich; unterstützt werden `zh-CN`, `en`, `ja`, `ko`, `fr`, `de`, `ru`.
+
+Die Einstellungen öffnen sich in einem eigenen Fenster mit **Systemeinstellung (Standard), Hell und Dunkel**. Änderungen gelten sofort und werden gespeichert; die Systemeinstellung folgt Änderungen des Betriebssystems. Auch Update-Prüfung und Programminformationen öffnen eigene Fenster. Erneutes Öffnen holt das vorhandene Fenster nach vorn, ohne die Anfrageansicht zu ersetzen. Einstellungen öffnen: **⌘ ,** unter macOS bzw. **Strg+,** unter Windows/Linux. Hilfsfenster schließen: **Esc** oder **⌘/Strg+W**.
 
 Anwendungsmeldungen und Beschreibungen integrierter Plugins werden übersetzt. Eigene Namen, Variablenwerte, Anfrage-/Antwortdaten und bestehende Verlaufseinträge bleiben unverändert. Servermeldungen und Drittanbieter-Plugins ohne Übersetzungen werden nicht automatisch übersetzt.
 

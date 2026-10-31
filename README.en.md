@@ -32,7 +32,9 @@ Adjust the path if installed elsewhere. This is optional troubleshooting, not an
 
 ## Interface languages
 
-The language dropdown at the top supports **简体中文, English, 日本語, 한국어, Français, Deutsch and Русский**. Switching takes effect immediately and the preference is saved. New and older workspaces default to Simplified Chinese. You can also launch with `--language=zh-CN`, `en`, `ja`, `ko`, `fr`, `de` or `ru` (for example, `--language=ja`).
+In **RPCRad → Settings… → Language**, the dropdown supports **简体中文, English, 日本語, 한국어, Français, Deutsch and Русский**. Switching takes effect immediately and the preference is saved. New and older workspaces default to Simplified Chinese. You can also launch with `--language=zh-CN`, `en`, `ja`, `ko`, `fr`, `de` or `ru` (for example, `--language=ja`).
+
+Settings opens in a separate window with **Follow system (default), Light and Dark** themes. Changes apply immediately and are saved; Follow system responds to system appearance changes. Update checks and About also use separate windows. Opening one again brings the existing window forward without replacing the request view. Open Settings with **⌘ ,** on macOS or **Ctrl+,** on Windows/Linux; **Esc** or **⌘/Ctrl+W** closes a utility window.
 
 Application messages and built-in plugin descriptions are translated. User-defined names, variable values, request/response data and existing call snapshots stay unchanged. Server messages and custom plugins without translations are not automatically translated.
 

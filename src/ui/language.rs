@@ -1,5 +1,4 @@
 use super::*;
-use gpui_kit::component::menu::PopupMenuItem;
 
 // GPUI's built-in input menus only ship a subset of our supported languages.
 fn input_menu(
@@ -72,31 +71,6 @@ pub(super) fn mask_button(state: &Entity<InputState>, cx: &App) -> Button {
 }
 
 impl Workbench {
-    pub(super) fn language_selector(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let weak = cx.weak_entity();
-        Button::new("language-selector")
-            .ghost()
-            .label(Language::current().label())
-            .icon(IconName::ChevronDown)
-            .accessibility_label(tr!("Language"))
-            .tooltip(tr!("Language"))
-            .dropdown_menu(move |mut menu, _, _| {
-                for language in Language::ALL {
-                    let target = weak.clone();
-                    menu = menu.item(
-                        PopupMenuItem::new(language.label())
-                            .checked(Language::current() == language)
-                            .on_click(move |_, window, cx| {
-                                let _ = target.update(cx, |this, cx| {
-                                    this.set_language(language, window, cx);
-                                });
-                            }),
-                    );
-                }
-                menu
-            })
-    }
-
     pub fn language_smoke_test(
         &mut self,
         window: &mut Window,
@@ -146,7 +120,12 @@ impl Workbench {
         Ok(())
     }
 
-    fn set_language(&mut self, language: Language, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn set_language(
+        &mut self,
+        language: Language,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         if language == Language::current() {
             return;
         }
@@ -166,6 +145,7 @@ impl Workbench {
         // Refresh update messages in the newly selected language.
         self.update_status = tr!("Checking for updates…").into();
         self.check_update(cx);
+        cx.refresh_windows();
         cx.notify();
     }
 }
@@ -179,10 +159,12 @@ mod tests {
     fn old_workspaces_keep_data_and_default_to_chinese() {
         let mut saved = serde_json::to_value(Saved::default()).unwrap();
         saved.as_object_mut().unwrap().remove("language");
+        saved.as_object_mut().unwrap().remove("appearance");
         saved["endpoint"] = "{{endpoint}}".into();
         saved["drafts"] = serde_json::json!({"demo/Call": "{\"name\":\"中文 {{name}}\"}"});
         let mut restored: Saved = serde_json::from_value(saved.clone()).unwrap();
         assert_eq!(restored.language, Language::Chinese);
+        assert_eq!(restored.appearance, crate::theme::Appearance::System);
         restored.language = Language::English;
         let roundtrip = serde_json::to_value(&restored).unwrap();
         assert_eq!(roundtrip["language"], "en");
