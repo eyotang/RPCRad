@@ -1,0 +1,62 @@
+name: Windows gRPC runtime diagnostics
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  runtime:
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: .go-version
+          cache-dependency-path: tools/demo/go.sum
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - run: python tools/setup.py
+      - name: Repeat streaming and deadline requests with server diagnostics
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import socket, subprocess, time
+          root = Path.cwd()
+          log = root/'windows-fixture.log'
+          with log.open('w', encoding='utf-8') as output:
+              server = subprocess.Popen([str(root/'tools/bin/rpcrad-demo.exe'), '-addr', '127.0.0.1:50051'], stdout=output, stderr=subprocess.STDOUT)
+              try:
+                  for _ in range(100):
+                      if server.poll() is not None: raise RuntimeError('Fixture exited before accepting connections')
+                      try:
+                          with socket.create_connection(('127.0.0.1',50051),timeout=.1): break
+                      except OSError: time.sleep(.05)
+                  else: raise RuntimeError('Fixture did not start')
+                  base = [str(root/'tools/bin/grpcurl.exe'), '-plaintext', '-import-path', str(root/'examples/protos'), '-proto', 'user.proto', '-v', '-emit-defaults']
+                  for attempt in range(30):
+                      for method, deadline, expected in [('GetUser','5',0),('WatchUsers','5',0),('WatchUsers','1',4)]:
+                          result = subprocess.run(base+['-max-time',deadline,'-d','@','127.0.0.1:50051','user.v1.UserService/'+method],input='{}',capture_output=True,text=True,timeout=15)
+                          diagnostic = result.stdout + result.stderr
+                          if server.poll() is not None:
+                              raise RuntimeError(f'Fixture exited with {server.returncode}: {diagnostic}')
+                          if expected == 0 and result.returncode != 0:
+                              raise RuntimeError(f'{method}: {diagnostic}')
+                          if expected != 0 and ('DeadlineExceeded' not in diagnostic or result.returncode == 0):
+                              raise RuntimeError(f'Deadline request: {diagnostic}')
+                      print(f'PASS: streaming/deadline round {attempt+1}',flush=True)
+              except Exception:
+                  output.flush()
+                  print(log.read_text(encoding='utf-8',errors='replace'),flush=True)
+                  raise
+              finally:
+                  server.terminate()
+                  try: server.wait(timeout=5)
+                  except subprocess.TimeoutExpired: server.kill();server.wait()
+          PY
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: windows-fixture-diagnostics
+          path: windows-fixture.log
