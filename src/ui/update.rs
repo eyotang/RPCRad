@@ -20,14 +20,21 @@ impl Workbench {
                     .gap_3()
                     .border_b_1()
                     .border_color(rgb(BORDER))
-                    .child(div().font_weight(FontWeight::SEMIBOLD).child("关于 RPCRad"))
+                    .child(
+                        div()
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .child(tr!("关于 RPCRad", "About RPCRad")),
+                    )
                     .child(div().flex_1())
                     .child(
                         Button::new("close-about")
                             .ghost()
                             .icon(IconName::X)
-                            .accessibility_label("关闭关于，返回调试")
-                            .tooltip("返回调试")
+                            .accessibility_label(tr!(
+                                "关闭关于，返回调试",
+                                "Close About and return to requests"
+                            ))
+                            .tooltip(tr!("返回调试", "Back to requests"))
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.about_open = false;
                                 cx.notify();
@@ -55,9 +62,16 @@ impl Workbench {
                                             .font_weight(FontWeight::SEMIBOLD)
                                             .child("RPCRad"),
                                     )
-                                    .child(format!("版本 {}", env!("CARGO_PKG_VERSION")))
+                                    .child(tr_format!(
+                                        "版本 {}",
+                                        "Version {}",
+                                        env!("CARGO_PKG_VERSION")
+                                    ))
                                     .child(
-                                        div().text_color(rgb(MUTED)).child("本地 gRPC 调试工具"),
+                                        div().text_color(rgb(MUTED)).child(tr!(
+                                            "本地 gRPC 调试工具",
+                                            "Local gRPC workbench"
+                                        )),
                                     ),
                             ),
                     )
@@ -65,7 +79,7 @@ impl Workbench {
                     .child(
                         Button::new("about-repository")
                             .ghost()
-                            .label("项目主页")
+                            .label(tr!("项目主页", "Project homepage"))
                             .on_click(|_, _, cx| cx.open_url("https://github.com/eyotang/RPCRad")),
                     ),
             )
@@ -74,7 +88,7 @@ impl Workbench {
         if self.update_receiver.is_some() {
             return;
         }
-        self.update_status = "正在检查更新…".into();
+        self.update_status = tr!("正在检查更新…", "Checking for updates…").into();
         let (tx, rx) = mpsc::channel();
         self.update_receiver = Some(rx);
         std::thread::spawn(move || {
@@ -93,11 +107,14 @@ impl Workbench {
                 Ok(release) => {
                     self.update_status = release
                         .as_ref()
-                        .map(|r| format!("发现新版本 {}", r.version))
-                        .unwrap_or_else(|| "当前已是最新版本".into());
+                        .map(|r| tr_format!("发现新版本 {}", "Version {} available", r.version))
+                        .unwrap_or_else(|| tr!("当前已是最新版本", "You are up to date").into());
                     self.available_update = release;
                 }
-                Err(error) => self.update_status = format!("检查失败：{error}"),
+                Err(error) => {
+                    self.update_status =
+                        tr_format!("检查失败：{error}", "Update check failed: {error}")
+                }
             }
             cx.notify();
         }
@@ -105,15 +122,15 @@ impl Workbench {
     pub(super) fn update_panel(&self, cx: &mut Context<Self>) -> impl IntoElement {
         column().gap_3().border_t_1().border_color(rgb(BORDER)).pt_4()
             .child(row().justify_between().child(format!("RPCRad {}",env!("CARGO_PKG_VERSION")))
-                .child(Button::new("check-update").label("检查更新").disabled(self.update_receiver.is_some())
+                .child(Button::new("check-update").label(tr!("检查更新", "Check for updates")).disabled(self.update_receiver.is_some())
                     .on_click(cx.listener(|this,_,_,cx|this.check_update(cx)))))
             .child(div().text_sm().text_color(rgb(MUTED)).child(self.update_status.clone()))
             .when_some(self.available_update.as_ref(), |s,release| {
                 let version = release.version.clone();
                 s.child(div().text_sm().child(release.notes.clone()))
-                    .child(Button::new("download-update").primary().label(format!("下载 {}",release.version))
+                    .child(Button::new("download-update").primary().label(tr_format!("下载 {}", "Download {}",release.version))
                         .on_click(cx.listener(move |_,_,_,cx|{ if let Some(url)=updater::release_page(&version) { cx.open_url(&url); } })))
             })
-            .child(div().text_xs().text_color(rgb(MUTED)).child("启动时自动检查。更新会打开对应版本下载页；选择适合系统的安装包，升级后保留本地工作区配置。"))
+            .child(div().text_xs().text_color(rgb(MUTED)).child(tr!("启动时自动检查。更新会打开对应版本下载页；选择适合系统的安装包，升级后保留本地工作区配置。", "Updates are checked at startup. Download the package for your system from the release page. Your local workspace is preserved when upgrading.")))
     }
 }

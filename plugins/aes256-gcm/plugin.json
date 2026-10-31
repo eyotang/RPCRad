@@ -1,1 +1,29 @@
-{"api_version":1,"id":"aes256-gcm","name":"AES-256-GCM · 示例","description":"加密指定 Metadata 值，移除原文头。输出 Base64(nonce 12 字节 + 密文 + tag 16 字节)。","secret_encoding":"hex","fields":[{"key":"source_header","label":"原文头名称","default":"x-payload"},{"key":"target_header","label":"密文头名称","default":"x-encrypted"},{"key":"aad","label":"附加认证数据 AAD","default":""}]}
+{
+  "api_version": 1,
+  "id": "aes256-gcm",
+  "name": "AES-256-GCM · 示例",
+  "description": "加密指定 Metadata 值，移除原文头。输出 Base64(nonce 12 字节 + 密文 + tag 16 字节)。",
+  "secret_encoding": "hex",
+  "fields": [
+    {
+      "key": "source_header",
+      "label": "原文头名称",
+      "default": "x-payload",
+      "label_en": "Source header"
+    },
+    {
+      "key": "target_header",
+      "label": "密文头名称",
+      "default": "x-encrypted",
+      "label_en": "Encrypted header"
+    },
+    {
+      "key": "aad",
+      "label": "附加认证数据 AAD",
+      "default": "",
+      "label_en": "Additional data (AAD)"
+    }
+  ],
+  "name_en": "AES-256-GCM · Example",
+  "description_en": "Encrypts a metadata value and removes the original header. Outputs Base64(nonce 12 bytes + ciphertext + tag 16 bytes)."
+}

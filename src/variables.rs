@@ -51,7 +51,10 @@ impl Variables {
         self.environments
             .iter()
             .find(|e| Some(e.id) == self.active)
-            .map_or("无环境 · 全局变量", |e| e.name.as_str())
+            .map_or(
+                tr!("无环境 · 全局变量", "No environment · Globals"),
+                |e| e.name.as_str(),
+            )
     }
     pub fn resolver(&self) -> Result<Resolver<'_>> {
         let mut values = BTreeMap::new();
@@ -64,9 +67,15 @@ impl Variables {
                 let name = row.name.trim();
                 ensure!(
                     valid_name(name),
-                    "变量名只能包含字母、数字、下划线、点和短横线，且不能以数字开头"
+                    tr!(
+                        "变量名只能包含字母、数字、下划线、点和短横线，且不能以数字开头",
+                        "Variable names may contain letters, digits, underscores, dots and hyphens, and cannot start with a digit"
+                    )
                 );
-                ensure!(names.insert(name.to_owned()), "变量名重复：{name}");
+                ensure!(
+                    names.insert(name.to_owned()),
+                    tr_format!("变量名重复：{name}", "Duplicate variable name: {name}")
+                );
             }
             Ok(())
         };
@@ -81,7 +90,12 @@ impl Variables {
                 .environments
                 .iter()
                 .find(|e| e.id == id)
-                .ok_or_else(|| anyhow::anyhow!("当前环境不存在，请重新选择"))?;
+                .ok_or_else(|| {
+                    anyhow::anyhow!(tr_format!(
+                        "当前环境不存在，请重新选择",
+                        "The active environment no longer exists; select another"
+                    ))
+                })?;
             add(&env.variables)?;
             for v in &env.variables {
                 if !v.name.trim().is_empty() {
@@ -117,25 +131,49 @@ impl Resolver<'_> {
     pub fn json(&self, input: &str) -> Result<String> {
         let output = self.expand(input, true, &mut Vec::new(), &mut 4096)?;
         serde_json::from_str::<serde_json::Value>(&output).map_err(|e| {
-            anyhow::anyhow!(
+            anyhow::anyhow!(tr_format!(
                 "变量替换后的 JSON 格式有误（第 {} 行，第 {} 列）",
+                "Invalid JSON after resolving variables (line {}, column {})",
                 e.line(),
                 e.column()
-            )
+            ))
         })?;
         Ok(output)
     }
     fn value(&self, name: &str, stack: &mut Vec<String>, budget: &mut usize) -> Result<String> {
-        ensure!(valid_name(name), "无效的变量引用，请使用 {{{{变量名}}}}");
-        ensure!(stack.len() < 16, "变量引用层级超过 16 层");
-        ensure!(!stack.iter().any(|s| s == name), "变量循环引用：{name}");
-        let variable = self
-            .values
-            .get(name)
-            .ok_or_else(|| anyhow::anyhow!("未定义变量：{name}"))?;
+        ensure!(
+            valid_name(name),
+            tr_format!(
+                "无效的变量引用，请使用 {{{{变量名}}}}",
+                "Invalid variable reference; use {{{{name}}}}"
+            )
+        );
+        ensure!(
+            stack.len() < 16,
+            tr!(
+                "变量引用层级超过 16 层",
+                "Variable references exceed 16 levels"
+            )
+        );
+        ensure!(
+            !stack.iter().any(|s| s == name),
+            tr_format!(
+                "变量循环引用：{name}",
+                "Circular variable reference: {name}"
+            )
+        );
+        let variable = self.values.get(name).ok_or_else(|| {
+            anyhow::anyhow!(tr_format!(
+                "未定义变量：{name}",
+                "Undefined variable: {name}"
+            ))
+        })?;
         ensure!(
             !variable.sensitive || !variable.value.is_empty(),
-            "敏感变量尚未填写：{name}"
+            tr_format!(
+                "敏感变量尚未填写：{name}",
+                "Sensitive variable has no value: {name}"
+            )
         );
         stack.push(name.to_string());
         let result = self.expand(&variable.value, false, stack, budget);
@@ -149,7 +187,13 @@ impl Resolver<'_> {
         stack: &mut Vec<String>,
         budget: &mut usize,
     ) -> Result<String> {
-        ensure!(input.len() <= LIMIT, "变量或请求内容超过 1 MiB");
+        ensure!(
+            input.len() <= LIMIT,
+            tr!(
+                "变量或请求内容超过 1 MiB",
+                "Variable or request content exceeds 1 MiB"
+            )
+        );
         let mut output = String::with_capacity(input.len());
         let mut offset = 0;
         let mut quoted = false;
@@ -158,11 +202,26 @@ impl Resolver<'_> {
             let rest = &input[offset..];
             if let Some(reference) = rest.strip_prefix("{{") {
                 let Some(end) = reference.find("}}") else {
-                    bail!("变量引用缺少结束符号 }}}}");
+                    bail!(tr_format!(
+                        "变量引用缺少结束符号 }}}}",
+                        "Variable reference is missing its closing }}}}"
+                    ));
                 };
-                ensure!(!json || !escaped, "变量引用前不能直接使用反斜杠");
+                ensure!(
+                    !json || !escaped,
+                    tr!(
+                        "变量引用前不能直接使用反斜杠",
+                        "A variable reference cannot directly follow a backslash"
+                    )
+                );
                 let name = reference[..end].trim();
-                ensure!(*budget > 0, "变量引用次数超过限制（4096 次）");
+                ensure!(
+                    *budget > 0,
+                    tr!(
+                        "变量引用次数超过限制（4096 次）",
+                        "Too many variable references (limit: 4096)"
+                    )
+                );
                 *budget -= 1;
                 let value = self.value(name, stack, budget)?;
                 if json && quoted {
@@ -171,8 +230,8 @@ impl Resolver<'_> {
                 } else if json {
                     let parsed: serde_json::Value = serde_json::from_str(&value).map_err(|_| {
                         anyhow::anyhow!(
-                            "变量 {name} 不是有效的 JSON 值；字符串请写为 \"{{{{{name}}}}}\""
-                        )
+                            tr_format!("变量 {name} 不是有效的 JSON 值；字符串请写为 \"{{{{{name}}}}}\"", "Variable {name} is not a valid JSON value; quote strings as \"{{{{{name}}}}}\""
+                        ))
                     })?;
                     output.push_str(&serde_json::to_string(&parsed)?);
                 } else {
@@ -183,7 +242,7 @@ impl Resolver<'_> {
                 let c = rest
                     .chars()
                     .next()
-                    .ok_or_else(|| anyhow::anyhow!("无效文本"))?;
+                    .ok_or_else(|| anyhow::anyhow!(tr_format!("无效文本", "Invalid text")))?;
                 output.push(c);
                 offset += c.len_utf8();
                 if json {

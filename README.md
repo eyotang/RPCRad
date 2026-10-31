@@ -11,7 +11,7 @@
 | macOS 15+ | Apple Silicon / Intel | 各自独立的 `.dmg` |
 | Windows 10/11 | x64 | `-setup.exe` 安装器、便携 `.zip` |
 | Ubuntu 24.04+ | x64 | `.deb`、便携 `.tar.gz` |
-| Omarchy / Arch Linux | x64 | [下载 0.3.1 pacman 安装包](https://github.com/eyotang/RPCRad/releases/download/v0.3.1/rpcrad-0.3.1-1-x86_64.pkg.tar.zst)，原生 Wayland 与 X11 |
+| Omarchy / Arch Linux | x64 | [下载 0.4.0 pacman 安装包](https://github.com/eyotang/RPCRad/releases/download/v0.4.0/rpcrad-0.4.0-1-x86_64.pkg.tar.zst)，原生 Wayland 与 X11 |
 
 所有包包含 grpcurl、示例 Proto 和依赖许可证，不需要安装 Rust 或 Go。Windows 安装器创建开始菜单入口并支持卸载；Linux 系统包安装应用菜单和图标。安装步骤、依赖与 macOS `xattr` 命令见 [安装说明](docs/INSTALL.md)。
 
@@ -56,6 +56,12 @@ tools/bin/rpcrad-demo
 
 预览版暂不包含客户端流、双向流、自定义 CA / mTLS 与完整的 Proto import-root 管理。Proto 的父目录会自动作为 import path；复杂跨目录依赖需要后续增加自定义 import path。响应展示最多保留 8 MiB。示例 Proto 随应用打包，发布版不依赖源码目录。Windows / Linux Arm64 安装包尚未提供。
 
+## 界面语言
+
+顶部 **简体中文 / English** 下拉框可即时切换语言，无需重启，选择会随工作区保存。菜单、请求编辑、插件、历史详情、环境管理与应用错误提示均支持中英文。首次启动和旧工作区默认使用简体中文。
+
+请求/响应数据、变量值、环境名称和已记录的调用快照保持原样。服务端错误及第三方插件自行提供的文案不会自动翻译。内置插件提供两种语言；本地插件可提供可选的英文名称、说明和字段标签，详见插件开发说明。启动参数 `--language=en` 或 `--language=zh-CN` 可覆盖保存的选择。
+
 ## 环境与变量
 
 右上角环境下拉框用于切换环境，旁边的 **变量** 打开管理页。可以新建、重命名、删除环境，添加、编辑、删除变量。全局变量对所有环境生效，当前环境中的同名变量优先；选择“无环境”时只使用全局变量。名称、普通变量和环境选择自动保存。
@@ -97,7 +103,7 @@ tools/bin/rpcrad-demo
 python tools/setup.py
 cargo run --locked
 # 在当前系统构建对应发布包
-python tools/release.py --tag v0.3.1
+python tools/release.py --tag v0.4.0
 ```
 
 首次构建通过 Cargo / Go 下载公开依赖；调试无需账号或云服务。启动时会向 GitHub 检查版本，不上传请求内容。示例服务只监听 127.0.0.1。

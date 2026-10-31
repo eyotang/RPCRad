@@ -16,6 +16,18 @@ pub(super) struct PluginUi {
     catalog_receiver: Option<Receiver<(Vec<Plugin>, Vec<String>)>>,
 }
 impl PluginUi {
+    pub(super) fn refresh_language(&mut self, window: &mut Window, cx: &mut Context<Workbench>) {
+        self.secret.update(cx, |s, cx| {
+            s.set_placeholder(
+                tr!(
+                    "secret 或 {{secret}} · 敏感值仅本次会话",
+                    "secret or {{secret}} · Sensitive values are session-only"
+                ),
+                window,
+                cx,
+            )
+        });
+    }
     pub(super) fn new(
         settings: Settings,
         window: &mut Window,
@@ -24,7 +36,10 @@ impl PluginUi {
         let (catalog, errors) = plugin::builtin_catalog();
         let secret = cx.new(|cx| {
             InputState::new(window, cx)
-                .placeholder("secret 或 {{secret}} · 敏感值仅本次会话")
+                .placeholder(tr!(
+                    "secret 或 {{secret}} · 敏感值仅本次会话",
+                    "secret or {{secret}} · Sensitive values are session-only"
+                ))
                 .default_value(settings.secret_reference.clone())
                 .masked(true)
         });
@@ -135,15 +150,26 @@ impl PluginUi {
         }
         anyhow::ensure!(
             self.catalog_receiver.is_none(),
-            "插件目录仍在加载，请稍后再试"
+            tr!(
+                "插件目录仍在加载，请稍后再试",
+                "The plugin directory is still loading; try again shortly"
+            )
         );
         anyhow::ensure!(
             self.errors.is_empty(),
-            "插件加载失败，请修正插件或恢复内置插件"
+            tr!(
+                "插件加载失败，请修正插件或恢复内置插件",
+                "Could not load plugins; fix them or restore the built-in plugins"
+            )
         );
         let plugin = self
             .current()
-            .ok_or_else(|| anyhow::anyhow!("已启用的插件未找到，请重新选择插件"))?
+            .ok_or_else(|| {
+                anyhow::anyhow!(tr_format!(
+                    "已启用的插件未找到，请重新选择插件",
+                    "The enabled plugin was not found; select a plugin again"
+                ))
+            })?
             .clone();
         Ok(Some(Execution {
             plugin,
@@ -200,7 +226,13 @@ impl Workbench {
             files: false,
             directories: true,
             multiple: false,
-            prompt: Some("选择包含插件子目录的文件夹".into()),
+            prompt: Some(
+                tr!(
+                    "选择包含插件子目录的文件夹",
+                    "Select the folder containing plugin directories"
+                )
+                .into(),
+            ),
         });
         cx.spawn_in(window, async move |this, cx| {
             if let Ok(Ok(Some(paths))) = paths.await
@@ -219,13 +251,14 @@ impl Workbench {
         let result = (|| -> anyhow::Result<_> {
             let variables = self.environments.snapshot(cx);
             let resolver = variables.resolver()?;
-            let execution = self
-                .plugins
-                .execution(&resolver, cx)?
-                .ok_or_else(|| anyhow::anyhow!("请先启用插件"))?;
+            let execution = self.plugins.execution(&resolver, cx)?.ok_or_else(|| {
+                anyhow::anyhow!(tr_format!("请先启用插件", "Enable a plugin first"))
+            })?;
             let method = self
                 .current()
-                .ok_or_else(|| anyhow::anyhow!("请先选择方法"))?
+                .ok_or_else(|| {
+                    anyhow::anyhow!(tr_format!("请先选择方法", "Select a method first"))
+                })?
                 .path();
             Ok((
                 execution,
@@ -269,13 +302,13 @@ impl Workbench {
             .child(
                 row()
                     .justify_between()
-                    .child(div().font_weight(FontWeight::SEMIBOLD).child("请求头插件"))
+                    .child(div().font_weight(FontWeight::SEMIBOLD).child(tr!("请求头插件", "Header plugins")))
                     .child(
                         Button::new("enable-plugin")
                             .label(if self.plugins.settings.enabled {
-                                "已启用"
+                                tr!("已启用", "Enabled")
                             } else {
-                                "启用插件"
+                                tr!("启用插件", "Enable plugin")
                             })
                             .disabled(self.busy)
                             .on_click(cx.listener(|this, _, _, cx| {
@@ -290,7 +323,7 @@ impl Workbench {
                 div()
                     .text_xs()
                     .text_color(rgb(MUTED))
-                    .child("对工作区内所有业务调用生效；服务反射使用原始 Metadata。"),
+                    .child(tr!("对工作区内所有业务调用生效；服务反射使用原始 Metadata。", "Applies to all RPC calls in this workspace. Server reflection uses the original metadata.")),
             );
         let mut choices = row().flex_wrap().gap_2();
         for (index, plugin) in self.plugins.catalog.iter().enumerate() {
@@ -304,7 +337,7 @@ impl Workbench {
                         } else {
                             ""
                         },
-                        plugin.manifest.name
+                        plugin.manifest.name()
                     ))
                     .disabled(self.busy)
                     .on_click(cx.listener(move |this, _, window, cx| {
@@ -326,23 +359,32 @@ impl Workbench {
                 div()
                     .text_sm()
                     .text_color(rgb(MUTED))
-                    .child(plugin.manifest.description.clone()),
+                    .child(plugin.manifest.description().to_owned()),
             );
             for (index, field) in plugin.manifest.fields.iter().enumerate() {
                 let input = &self.plugins.fields[index].1;
-                let mut field_row = row()
-                    .gap_3()
-                    .child(div().w(px(125.)).flex_shrink_0().child(field.label.clone()));
+                let mut field_row = row().gap_3().child(
+                    div()
+                        .w(px(160.))
+                        .flex_shrink_0()
+                        .child(field.label().to_owned()),
+                );
                 if field.options.is_empty() {
                     field_row = field_row
                         .child(div().flex_1().child(Input::new(input).disabled(self.busy)));
                 } else {
                     let value = input.read(cx).value();
                     let label = match value.as_ref() {
-                        "milliseconds" => "当前时间 · 毫秒（13 位）",
-                        "seconds" => "当前时间 · 秒（10 位）",
-                        "lower" => "小写",
-                        "upper" => "大写",
+                        "milliseconds" => tr!(
+                            "当前时间 · 毫秒（13 位）",
+                            "Current time · Milliseconds (13 digits)"
+                        ),
+                        "seconds" => tr!(
+                            "当前时间 · 秒（10 位）",
+                            "Current time · Seconds (10 digits)"
+                        ),
+                        "lower" => tr!("小写", "Lowercase"),
+                        "upper" => tr!("大写", "Uppercase"),
                         _ => value.as_ref(),
                     }
                     .to_string();
@@ -351,7 +393,7 @@ impl Workbench {
                         .child(div().flex_1().child(Input::new(input).disabled(self.busy)))
                         .child(
                             Button::new(("plugin-option", index))
-                                .label("切换选项")
+                                .label(tr!("切换选项", "Next option"))
                                 .tooltip(label)
                                 .disabled(self.busy)
                                 .on_click(cx.listener(move |this, _, window, cx| {
@@ -377,7 +419,7 @@ impl Workbench {
                 .child(
                     row()
                         .gap_3()
-                        .child(div().w(px(125.)).flex_shrink_0().child("Secret"))
+                        .child(div().w(px(160.)).flex_shrink_0().child("Secret"))
                         .child(
                             div().flex_1().child(
                                 Input::new(&self.plugins.secret)
@@ -386,8 +428,8 @@ impl Workbench {
                             ),
                         ),
                 )
-                .child(div().text_xs().text_color(rgb(MUTED)).child(format!(
-                    "密钥编码：{}。Secret 明文不保存，{{{{secret}}}} 引用会保存；普通参数支持 {{{{变量名}}}}。",
+                .child(div().text_xs().text_color(rgb(MUTED)).child(tr_format!(
+                    "密钥编码：{}。Secret 明文不保存，{{{{secret}}}} 引用会保存；普通参数支持 {{{{变量名}}}}。", "Key encoding: {}. Raw secrets are not saved; {{{{secret}}}} references are saved. Other fields support {{{{name}}}}.",
                     plugin.manifest.secret_encoding
                 )));
         }
@@ -399,9 +441,9 @@ impl Workbench {
                         Button::new("preview-plugin")
                             .primary()
                             .label(if self.plugins.preview_receiver.is_some() {
-                                "计算中…"
+                                tr!("计算中…", "Computing…")
                             } else {
-                                "预览头部"
+                                tr!("预览头部", "Preview headers")
                             })
                             .disabled(
                                 self.busy
@@ -414,9 +456,9 @@ impl Workbench {
                         Button::new("reload-plugins")
                             .ghost()
                             .label(if self.plugins.settings.directory.is_some() {
-                                "重新加载插件"
+                                tr!("重新加载插件", "Reload plugins")
                             } else {
-                                "加载本地插件…"
+                                tr!("加载本地插件…", "Load local plugins…")
                             })
                             .disabled(self.busy)
                             .on_click(cx.listener(|this, _, window, cx| {
@@ -434,14 +476,14 @@ impl Workbench {
                 div()
                     .text_xs()
                     .text_color(rgb(MUTED))
-                    .child("每次发送重新计算。预览仅是快照，不会复用到下一次请求。"),
+                    .child(tr!("每次发送重新计算。预览仅是快照，不会复用到下一次请求。", "Recomputed for every request. Previews are snapshots and are never reused for sending.")),
             );
         if self.plugins.settings.directory.is_some() {
             panel = panel.child(
                 Button::new("builtin-plugins")
                     .ghost()
                     .small()
-                    .label("恢复内置插件")
+                    .label(tr!("恢复内置插件", "Restore built-in plugins"))
                     .disabled(self.busy)
                     .on_click(cx.listener(|this, _, window, cx| {
                         this.plugins.settings = this.plugins.settings(cx);
@@ -459,12 +501,15 @@ impl Workbench {
             );
         }
         if self.plugins.catalog_receiver.is_some() {
-            panel = panel.child("正在后台读取插件目录…");
+            panel = panel.child(tr!(
+                "正在后台读取插件目录…",
+                "Loading the plugin directory…"
+            ));
         }
         if let Some(result) = &self.plugins.preview {
             match result {
                 Ok(headers) => {
-                    panel = panel.child("最近生成的请求头");
+                    panel = panel.child(tr!("最近生成的请求头", "Last generated headers"));
                     for (index, (key, value)) in headers.iter().enumerate() {
                         let revealed = self.plugins.revealed.contains(key);
                         let mut label = row()
@@ -476,7 +521,11 @@ impl Workbench {
                                 Button::new(("preview-header-reveal", index))
                                     .ghost()
                                     .small()
-                                    .label(if revealed { "隐藏" } else { "显示" })
+                                    .label(if revealed {
+                                        tr!("隐藏", "Hide")
+                                    } else {
+                                        tr!("显示", "Show")
+                                    })
                                     .on_click(cx.listener(move |this, _, _, cx| {
                                         if !this.plugins.revealed.remove(&key) {
                                             this.plugins.revealed.insert(key.clone());
@@ -498,11 +547,10 @@ impl Workbench {
             }
         }
         for error in &self.plugins.errors {
-            panel = panel.child(
-                div()
-                    .text_color(rgb(0xc35246))
-                    .child(format!("插件加载错误：{error}")),
-            );
+            panel = panel.child(div().text_color(rgb(0xc35246)).child(tr_format!(
+                "插件加载错误：{error}",
+                "Plugin load error: {error}"
+            )));
         }
         panel
     }

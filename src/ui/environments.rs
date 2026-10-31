@@ -16,11 +16,36 @@ pub(super) struct EnvironmentUi {
     subscriptions: Vec<Subscription>,
 }
 impl EnvironmentUi {
+    pub(super) fn refresh_language(&mut self, window: &mut Window, cx: &mut Context<Workbench>) {
+        self.name.update(cx, |s, cx| {
+            s.set_placeholder(tr!("环境名称", "Environment name"), window, cx)
+        });
+        for row in &self.rows {
+            row.name.update(cx, |s, cx| {
+                s.set_placeholder(tr!("例如 appid", "e.g. appid"), window, cx)
+            });
+            row.value.update(cx, |s, cx| {
+                s.set_placeholder(
+                    if row.sensitive {
+                        tr!(
+                            "仅本次会话，重启后重新填写",
+                            "Session only; enter again after restart"
+                        )
+                    } else {
+                        tr!("值或 {{其他变量}}", "Value or {{other_variable}}")
+                    },
+                    window,
+                    cx,
+                )
+            });
+        }
+    }
     pub fn new(mut data: Variables, window: &mut Window, cx: &mut Context<Workbench>) -> Self {
         if !data.environments.iter().any(|e| Some(e.id) == data.active) {
             data.active = None;
         }
-        let name = cx.new(|cx| InputState::new(window, cx).placeholder("环境名称"));
+        let name = cx
+            .new(|cx| InputState::new(window, cx).placeholder(tr!("环境名称", "Environment name")));
         let mut state = Self {
             editing: data.active,
             data,
@@ -46,7 +71,7 @@ impl EnvironmentUi {
             if let Some(env) = data.environments.iter_mut().find(|e| e.id == id) {
                 let name = self.name.read(cx).value();
                 env.name = if name.trim().is_empty() {
-                    "未命名环境".into()
+                    tr!("未命名环境", "Untitled environment").into()
                 } else {
                     name.to_string()
                 };
@@ -62,24 +87,28 @@ impl EnvironmentUi {
         let (name, variables) = self
             .editing
             .and_then(|id| self.data.environments.iter().find(|e| e.id == id))
-            .map_or(("全局变量", &self.data.globals), |env| {
-                (env.name.as_str(), &env.variables)
-            });
+            .map_or(
+                (tr!("全局变量", "Global variables"), &self.data.globals),
+                |env| (env.name.as_str(), &env.variables),
+            );
         self.name.update(cx, |s, cx| s.set_value(name, window, cx));
         self.rows = variables
             .iter()
             .map(|v| VariableRow {
                 name: cx.new(|cx| {
                     InputState::new(window, cx)
-                        .placeholder("例如 appid")
+                        .placeholder(tr!("例如 appid", "e.g. appid"))
                         .default_value(v.name.clone())
                 }),
                 value: cx.new(|cx| {
                     InputState::new(window, cx)
                         .placeholder(if v.sensitive {
-                            "仅本次会话，重启后重新填写"
+                            tr!(
+                                "仅本次会话，重启后重新填写",
+                                "Session only; enter again after restart"
+                            )
                         } else {
-                            "值或 {{其他变量}}"
+                            tr!("值或 {{其他变量}}", "Value or {{other_variable}}")
                         })
                         .default_value(v.value.clone())
                         .masked(v.sensitive)
@@ -122,7 +151,11 @@ impl Workbench {
         self.environments.data.active = id;
         self.plugins.invalidate();
         self.save(cx);
-        self.notice = format!("当前环境：{}", self.environments.snapshot(cx).active_name());
+        self.notice = tr_format!(
+            "当前环境：{}",
+            "Active environment: {}",
+            self.environments.snapshot(cx).active_name()
+        );
         cx.notify();
     }
     pub(super) fn environment_selector(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -133,9 +166,13 @@ impl Workbench {
             .label(data.active_name().to_string())
             .icon(IconName::ChevronDown)
             .disabled(self.busy || self.discovering)
-            .accessibility_label("切换环境")
+            .accessibility_label(tr!("切换环境", "Switch environment"))
             .dropdown_menu(move |mut menu, _, _| {
-                for (id, name) in std::iter::once((None, "无环境 · 全局变量".to_string())).chain(
+                for (id, name) in std::iter::once((
+                    None,
+                    tr!("无环境 · 全局变量", "No environment · Globals").to_string(),
+                ))
+                .chain(
                     data.environments
                         .iter()
                         .map(|e| (Some(e.id), e.name.clone())),
@@ -151,12 +188,15 @@ impl Workbench {
                     );
                 }
                 let target = weak.clone();
-                menu.separator()
-                    .item(
-                        PopupMenuItem::new("管理环境与变量…").on_click(move |_, _, cx| {
-                            let _ = target.update(cx, |this, cx| this.open_environments(cx));
-                        }),
-                    )
+                menu.separator().item(
+                    PopupMenuItem::new(tr!(
+                        "管理环境与变量…",
+                        "Manage environments and variables…"
+                    ))
+                    .on_click(move |_, _, cx| {
+                        let _ = target.update(cx, |this, cx| this.open_environments(cx));
+                    }),
+                )
             })
     }
     fn add_environment(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -172,7 +212,7 @@ impl Workbench {
             .saturating_add(1);
         self.environments.data.environments.push(Environment {
             id,
-            name: format!("新环境 {id}"),
+            name: tr_format!("新环境 {id}", "New environment {id}"),
             variables: vec![],
         });
         self.environments.editing = Some(id);
@@ -211,14 +251,20 @@ impl Workbench {
             .p_4()
             .border_r_1()
             .border_color(rgb(BORDER))
-            .child(div().text_xs().text_color(rgb(MUTED)).child("变量作用域"));
-        for (index, (id, name)) in std::iter::once((None, "全局变量".to_string()))
-            .chain(
-                data.environments
-                    .iter()
-                    .map(|e| (Some(e.id), e.name.clone())),
-            )
-            .enumerate()
+            .child(
+                div()
+                    .text_xs()
+                    .text_color(rgb(MUTED))
+                    .child(tr!("变量作用域", "Variable scope")),
+            );
+        for (index, (id, name)) in
+            std::iter::once((None, tr!("全局变量", "Global variables").to_string()))
+                .chain(
+                    data.environments
+                        .iter()
+                        .map(|e| (Some(e.id), e.name.clone())),
+                )
+                .enumerate()
         {
             scopes = scopes.child(
                 Button::new(("environment-scope", index))
@@ -233,7 +279,7 @@ impl Workbench {
             Button::new("add-environment")
                 .ghost()
                 .icon(IconName::Plus)
-                .label("新建环境")
+                .label(tr!("新建环境", "New environment"))
                 .on_click(cx.listener(|this, _, window, cx| this.add_environment(window, cx))),
         );
         let mut editor = column().flex_1().min_w_0().p_5().gap_4();
@@ -245,9 +291,9 @@ impl Workbench {
                     .child(
                         Button::new("use-environment")
                             .label(if data.active == Some(id) {
-                                "当前环境"
+                                tr!("当前环境", "Active environment")
                             } else {
-                                "使用此环境"
+                                tr!("使用此环境", "Use this environment")
                             })
                             .disabled(self.busy || self.discovering)
                             .on_click(cx.listener(move |this, _, _, cx| {
@@ -258,7 +304,10 @@ impl Workbench {
                         Button::new("delete-environment")
                             .ghost()
                             .icon(IconName::Trash)
-                            .tooltip("删除此环境及其变量")
+                            .tooltip(tr!(
+                                "删除此环境及其变量",
+                                "Delete this environment and its variables"
+                            ))
                             .disabled(self.busy || self.discovering)
                             .on_click(cx.listener(move |this, _, window, cx| {
                                 this.environments.data = this.environments.snapshot(cx);
@@ -275,20 +324,24 @@ impl Workbench {
                     ),
             );
         } else {
-            editor = editor.child(div().font_weight(FontWeight::SEMIBOLD).child("全局变量"));
+            editor = editor.child(
+                div()
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .child(tr!("全局变量", "Global variables")),
+            );
         }
         editor = editor
             .child(div().text_sm().text_color(rgb(MUTED)).child(
-                "使用 {{变量名}} 引用。当前环境覆盖同名全局变量；未选择环境时只使用全局变量。",
+                tr!("使用 {{变量名}} 引用。当前环境覆盖同名全局变量；未选择环境时只使用全局变量。", "Reference values with {{name}}. Environment variables override globals with the same name. Without an environment, only globals are used."),
             ))
             .child(
                 row()
                     .gap_3()
                     .text_xs()
                     .text_color(rgb(MUTED))
-                    .child(div().w(px(180.)).child("变量名"))
-                    .child(div().flex_1().child("值"))
-                    .child(div().w(px(108.)).child("保存方式")),
+                    .child(div().w(px(180.)).child(tr!("变量名", "Name")))
+                    .child(div().flex_1().child(tr!("值", "Value")))
+                    .child(div().w(px(132.)).child(tr!("保存方式", "Storage"))),
             );
         let mut rows = column()
             .id("variables-scroll")
@@ -312,11 +365,11 @@ impl Workbench {
                             .ghost()
                             .small()
                             .label(if v.sensitive {
-                                "敏感 · 会话"
+                                tr!("敏感 · 会话", "Secret · Session")
                             } else {
-                                "普通 · 保存"
+                                tr!("普通 · 保存", "Plain · Saved")
                             })
-                            .tooltip("切换普通变量与敏感变量；敏感值不写入磁盘")
+                            .tooltip(tr!("切换普通变量与敏感变量；敏感值不写入磁盘", "Toggle plain and sensitive variables; sensitive values are never saved to disk"))
                             .on_click(cx.listener(move |this, _, window, cx| {
                                 let row = &mut this.environments.rows[index];
                                 row.sensitive = !row.sensitive;
@@ -332,7 +385,7 @@ impl Workbench {
                             .ghost()
                             .small()
                             .icon(IconName::Trash)
-                            .tooltip("删除变量")
+                            .tooltip(tr!("删除变量", "Delete variable"))
                             .on_click(cx.listener(move |this, _, window, cx| {
                                 this.environments.rows.remove(index);
                                 this.environments.data = this.environments.snapshot(cx);
@@ -346,12 +399,12 @@ impl Workbench {
         }
         if self.environments.rows.is_empty() {
             rows = rows.child(div().py_6().text_color(rgb(MUTED)).child(
-                "还没有变量。添加 endpoint、appid、user_id 等变量，在不同环境中填写对应值。",
+                tr!("还没有变量。添加 endpoint、appid、user_id 等变量，在不同环境中填写对应值。", "No variables yet. Add endpoint, appid or user_id and set their values for each environment."),
             ));
         }
-        editor=editor.child(rows).child(Button::new("add-variable").ghost().icon(IconName::Plus).label("添加变量")
+        editor=editor.child(rows).child(Button::new("add-variable").ghost().icon(IconName::Plus).label(tr!("添加变量", "Add variable"))
             .on_click(cx.listener(|this,_,window,cx|this.add_variable(window,cx))))
-            .child(div().text_xs().text_color(rgb(MUTED)).child("地址、Metadata、Bearer Token、插件参数和 Secret 均支持引用。包体：字符串用 \"{{user_id}}\"，数字或 JSON 用 {{page_size}}。敏感值仅在本次会话中保留。"));
+            .child(div().text_xs().text_color(rgb(MUTED)).child(tr!("地址、Metadata、Bearer Token、插件参数和 Secret 均支持引用。包体：字符串用 \"{{user_id}}\"，数字或 JSON 用 {{page_size}}。敏感值仅在本次会话中保留。", "Use variables in the address, metadata, Bearer token, plugin settings and Secret. In bodies, use \"{{user_id}}\" for strings and {{page_size}} for numbers or JSON. Sensitive values last only for this session.")));
         if let Err(error) = data.resolver() {
             editor = editor.child(div().text_color(rgb(0xc35246)).child(error.to_string()));
         }
@@ -367,16 +420,20 @@ impl Workbench {
                     .child(
                         Button::new("environment-back")
                             .ghost()
-                            .label("返回调试")
+                            .label(tr!("返回调试", "Back to requests"))
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.environments_open = false;
                                 this.save(cx);
                                 cx.notify();
                             })),
                     )
-                    .child(div().font_weight(FontWeight::SEMIBOLD).child("环境与变量"))
+                    .child(
+                        div()
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .child(tr!("环境与变量", "Environments and variables")),
+                    )
                     .child(div().flex_1())
-                    .child(badge("自动保存")),
+                    .child(badge(tr!("自动保存", "Autosaved"))),
             )
             .child(
                 row()

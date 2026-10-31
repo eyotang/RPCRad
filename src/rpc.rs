@@ -129,9 +129,10 @@ fn inspect(
     if let Some(symbol) = symbol {
         cmd.arg(symbol);
     }
-    let output = cmd
-        .output()
-        .context("无法启动 grpcurl，请先运行 tools/setup.sh")?;
+    let output = cmd.output().context(tr!(
+        "无法启动 grpcurl，请先运行 tools/setup.sh",
+        "Cannot start grpcurl; run tools/setup.sh first"
+    ))?;
     if !output.status.success() {
         bail!("{}", String::from_utf8_lossy(&output.stderr).trim());
     }
@@ -169,7 +170,7 @@ pub fn discover(connection: &Connection) -> Result<Vec<Method>> {
                 })
                 .and_then(|p| p.file_name())
                 .map(|s| s.to_string_lossy().into_owned())
-                .unwrap_or_else(|| "服务反射".into());
+                .unwrap_or_else(|| tr!("服务反射", "Server reflection").into());
             methods.push(Method {
                 service: service.into(),
                 name: captures[1].into(),
@@ -182,36 +183,57 @@ pub fn discover(connection: &Connection) -> Result<Vec<Method>> {
         }
     }
     if methods.is_empty() {
-        bail!("没有找到可调用的方法");
+        bail!(tr_format!(
+            "没有找到可调用的方法",
+            "No callable methods found"
+        ));
     }
     Ok(methods)
 }
 
 pub fn metadata(text: &str, token: &str) -> Result<Vec<(String, String)>> {
     let values: serde_json::Map<String, serde_json::Value> =
-        serde_json::from_str(text).context("Metadata 必须是 JSON 对象")?;
+        serde_json::from_str(text).context(tr!(
+            "Metadata 必须是 JSON 对象",
+            "Metadata must be a JSON object"
+        ))?;
     let mut entries = Vec::new();
     for (key, value) in values {
-        let value = value.as_str().context("Metadata 的值必须是字符串")?;
+        let value = value.as_str().context(tr!(
+            "Metadata 的值必须是字符串",
+            "Metadata values must be strings"
+        ))?;
         if key.is_empty()
             || key.starts_with("grpc-")
             || !key
                 .bytes()
                 .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b"_-.".contains(&b))
         {
-            bail!("无效的 Metadata 键：{key}");
+            bail!(tr_format!(
+                "无效的 Metadata 键：{key}",
+                "Invalid metadata key: {key}"
+            ));
         }
         if key.ends_with("-bin") {
-            bail!("此版本暂不支持二进制 Metadata");
+            bail!(tr_format!(
+                "此版本暂不支持二进制 Metadata",
+                "Binary metadata is not supported yet"
+            ));
         }
         if value.bytes().any(|b| !(32..=126).contains(&b)) {
-            bail!("Metadata 的值必须是可打印的 ASCII 字符");
+            bail!(tr_format!(
+                "Metadata 的值必须是可打印的 ASCII 字符",
+                "Metadata values must contain printable ASCII characters"
+            ));
         }
         entries.push((key, value.into()));
     }
     if !token.trim().is_empty() {
         if !token.bytes().all(|b| (32..=126).contains(&b)) {
-            bail!("Bearer token 包含无效字符");
+            bail!(tr_format!(
+                "Bearer token 包含无效字符",
+                "Bearer token contains invalid characters"
+            ));
         }
         entries.retain(|(key, _)| key != "authorization");
         entries.push(("authorization".into(), format!("Bearer {}", token.trim())));
@@ -234,7 +256,7 @@ pub fn invoke(
             reply
         }
         Err(error) => Reply {
-            status: "调用失败".into(),
+            status: tr!("调用失败", "Call failed").into(),
             body: format!("{error:#}"),
             elapsed_ms: start.elapsed().as_millis(),
             ..Reply::default()
@@ -264,16 +286,28 @@ fn invoke_inner(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .context("无法启动 grpcurl，请先运行 tools/setup.sh")?;
+        .context(tr!(
+            "无法启动 grpcurl，请先运行 tools/setup.sh",
+            "Cannot start grpcurl; run tools/setup.sh first"
+        ))?;
     // Capture the exact business metadata handed to this invocation, after plugins.
     let _ = tx.send(Event::RequestDispatched(connection.metadata.clone()));
-    let mut stdin = child.stdin.take().context("无法打开请求输入")?;
+    let mut stdin = child
+        .stdin
+        .take()
+        .context(tr!("无法打开请求输入", "Cannot open request input"))?;
     // Write on a separate thread so a large payload cannot block cancellation.
     thread::spawn(move || {
         let _ = stdin.write_all(body.as_bytes());
     });
-    let stdout = child.stdout.take().context("无法读取响应")?;
-    let stderr = child.stderr.take().context("无法读取错误")?;
+    let stdout = child
+        .stdout
+        .take()
+        .context(tr!("无法读取响应", "Cannot read the response"))?;
+    let stderr = child
+        .stderr
+        .take()
+        .context(tr!("无法读取错误", "Cannot read error output"))?;
     let progress_tx = tx.clone();
     let reader = thread::spawn(move || {
         let mut output = String::new();
@@ -322,22 +356,27 @@ fn invoke_inner(
     let mut reply = parse_output(&output);
     reply.status = match status {
         None if timed_out => "DeadlineExceeded".into(),
-        None => "已取消".into(),
+        None => tr!("已取消", "Cancelled").into(),
         Some(status) if status.success() => "0 OK".into(),
         _ => error
             .lines()
             .find(|l| l.trim().starts_with("Code:"))
             .map(|l| l.trim().trim_start_matches("Code:").trim().to_owned())
-            .unwrap_or_else(|| "连接失败".into()),
+            .unwrap_or_else(|| tr!("连接失败", "Connection failed").into()),
     };
     if timed_out {
         reply
             .body
-            .push_str("\n请求准备或调用超过超时限制；请检查 Proto 文件访问权限及服务连接。");
+            .push_str(tr!("\n请求准备或调用超过超时限制；请检查 Proto 文件访问权限及服务连接。", "\nRequest preparation or execution timed out. Check proto file permissions and the connection."));
     }
     if truncated {
-        reply.status.push_str(" · 显示已截断");
-        reply.body.push_str("\n\n响应超过 8 MiB，后续内容未显示。");
+        reply
+            .status
+            .push_str(tr!(" · 显示已截断", " · Display truncated"));
+        reply.body.push_str(tr!(
+            "\n\n响应超过 8 MiB，后续内容未显示。",
+            "\n\nThe response exceeds 8 MiB; additional content is not displayed."
+        ));
     }
     if !error.trim().is_empty() {
         if !reply.body.is_empty() {

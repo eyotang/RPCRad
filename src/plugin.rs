@@ -27,6 +27,8 @@ pub struct Field {
     pub key: String,
     pub label: String,
     #[serde(default)]
+    pub label_en: Option<String>,
+    #[serde(default)]
     pub default: String,
     #[serde(default)]
     pub options: Vec<String>,
@@ -36,9 +38,31 @@ pub struct Manifest {
     pub api_version: u32,
     pub id: String,
     pub name: String,
+    #[serde(default)]
+    pub name_en: Option<String>,
     pub description: String,
+    #[serde(default)]
+    pub description_en: Option<String>,
     pub secret_encoding: String,
     pub fields: Vec<Field>,
+}
+impl Field {
+    pub fn label(&self) -> &str {
+        crate::i18n::Language::current()
+            .text(&self.label, self.label_en.as_deref().unwrap_or(&self.label))
+    }
+}
+impl Manifest {
+    pub fn name(&self) -> &str {
+        crate::i18n::Language::current()
+            .text(&self.name, self.name_en.as_deref().unwrap_or(&self.name))
+    }
+    pub fn description(&self) -> &str {
+        crate::i18n::Language::current().text(
+            &self.description,
+            self.description_en.as_deref().unwrap_or(&self.description),
+        )
+    }
 }
 #[derive(Clone)]
 pub struct Plugin {
@@ -66,7 +90,13 @@ fn read_bounded(path: &Path) -> Result<String> {
     std::fs::File::open(path)?
         .take(65_537)
         .read_to_string(&mut text)?;
-    ensure!(text.len() <= 65_536, "插件文件不能超过 64 KiB");
+    ensure!(
+        text.len() <= 65_536,
+        tr!(
+            "插件文件不能超过 64 KiB",
+            "Plugin files must not exceed 64 KiB"
+        )
+    );
     Ok(text)
 }
 pub fn builtin_catalog() -> (Vec<Plugin>, Vec<String>) {
@@ -101,7 +131,15 @@ pub fn catalog_from(root: &Path) -> (Vec<Plugin>, Vec<String>) {
     let mut errors = Vec::new();
     let entries = match std::fs::read_dir(root) {
         Ok(entries) => entries,
-        Err(e) => return (plugins, vec![format!("插件目录不可用：{e}")]),
+        Err(e) => {
+            return (
+                plugins,
+                vec![tr_format!(
+                    "插件目录不可用：{e}",
+                    "Plugin directory unavailable: {e}"
+                )],
+            );
+        }
     };
     let mut ids = BTreeSet::new();
     for entry in entries {
@@ -115,19 +153,25 @@ pub fn catalog_from(root: &Path) -> (Vec<Plugin>, Vec<String>) {
             for name in ["plugin.json", "main.rhai"] {
                 ensure!(
                     path.join(name).canonicalize()?.starts_with(&root),
-                    "插件文件必须位于插件目录内"
+                    tr!(
+                        "插件文件必须位于插件目录内",
+                        "Plugin files must stay within the plugin directory"
+                    )
                 );
             }
             let manifest: Manifest =
                 serde_json::from_str(&read_bounded(&path.join("plugin.json"))?)?;
-            ensure!(manifest.api_version == 1, "不支持的插件 API 版本");
+            ensure!(
+                manifest.api_version == 1,
+                tr!("不支持的插件 API 版本", "Unsupported plugin API version")
+            );
             ensure!(
                 !manifest.id.is_empty() && ids.insert(manifest.id.clone()),
-                "插件 ID 为空或重复"
+                tr!("插件 ID 为空或重复", "Empty or duplicate plugin ID")
             );
             ensure!(
                 matches!(manifest.secret_encoding.as_str(), "utf8" | "hex" | "base64"),
-                "未知密钥编码"
+                tr!("未知密钥编码", "Unknown key encoding")
             );
             let mut fields = BTreeSet::new();
             ensure!(
@@ -135,7 +179,7 @@ pub fn catalog_from(root: &Path) -> (Vec<Plugin>, Vec<String>) {
                     && manifest.fields.iter().all(|f| !f.key.is_empty()
                         && fields.insert(&f.key)
                         && (f.options.is_empty() || f.options.contains(&f.default))),
-                "插件字段配置无效"
+                tr!("插件字段配置无效", "Invalid plugin field configuration")
             );
             Ok(Some(Plugin {
                 manifest,
@@ -164,10 +208,15 @@ fn script_error(message: &'static str) -> Box<EvalAltResult> {
     message.into()
 }
 fn encrypt(key: &[u8], text: &str, aad: &str) -> Result<String, Box<EvalAltResult>> {
-    let cipher =
-        Aes256Gcm::new_from_slice(key).map_err(|_| script_error("AES-256 密钥必须为 32 字节"))?;
+    let cipher = Aes256Gcm::new_from_slice(key).map_err(|_| {
+        script_error(tr!(
+            "AES-256 密钥必须为 32 字节",
+            "AES-256 keys must be 32 bytes"
+        ))
+    })?;
     let mut nonce = [0u8; 12];
-    getrandom::fill(&mut nonce).map_err(|_| script_error("生成随机数失败"))?;
+    getrandom::fill(&mut nonce)
+        .map_err(|_| script_error(tr!("生成随机数失败", "Failed to generate random bytes")))?;
     let encrypted = cipher
         .encrypt(
             &Nonce::from(nonce),
@@ -176,7 +225,7 @@ fn encrypt(key: &[u8], text: &str, aad: &str) -> Result<String, Box<EvalAltResul
                 aad: aad.as_bytes(),
             },
         )
-        .map_err(|_| script_error("AES 加密失败"))?;
+        .map_err(|_| script_error(tr!("AES 加密失败", "AES encryption failed")))?;
     Ok(STANDARD.encode([nonce.as_slice(), encrypted.as_slice()].concat()))
 }
 impl Execution {
@@ -190,7 +239,7 @@ impl Execution {
     ) -> Result<Headers> {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .context("系统时间不可用")?;
+            .context(tr!("系统时间不可用", "System time unavailable"))?;
         self.run_at(method, endpoint, body, headers, cancel, now.as_millis())
     }
     fn run_at(
@@ -202,28 +251,41 @@ impl Execution {
         cancel: Arc<AtomicBool>,
         millis: u128,
     ) -> Result<Headers> {
-        ensure!(!cancel.load(Ordering::Relaxed), "已取消，未发送请求");
+        ensure!(
+            !cancel.load(Ordering::Relaxed),
+            tr!("已取消，未发送请求", "Cancelled; request not sent")
+        );
         ensure!(
             !self.secret.is_empty(),
-            "请填写 secret；密钥仅保留在当前会话"
+            tr!(
+                "请填写 secret；密钥仅保留在当前会话",
+                "Enter a secret; keys are kept only for this session"
+            )
         );
         ensure!(
             self.secret.len() <= 4096 && body.len() <= 1_048_576,
-            "插件输入超过限制（secret 4 KiB / 请求体 1 MiB）"
+            tr!(
+                "插件输入超过限制（secret 4 KiB / 请求体 1 MiB）",
+                "Plugin input exceeds limits (secret 4 KiB / body 1 MiB)"
+            )
         );
         ensure!(
             self.config.len() <= 16 && self.config.values().all(|v| v.len() <= 8192),
-            "插件参数超过限制"
+            tr!("插件参数超过限制", "Plugin settings exceed limits")
         );
         let key = Zeroizing::new(match self.plugin.manifest.secret_encoding.as_str() {
-            "hex" => hex::decode(self.secret.as_str()).context("secret 必须为十六进制")?,
+            "hex" => hex::decode(self.secret.as_str())
+                .context(tr!("secret 必须为十六进制", "Secret must be hexadecimal"))?,
             "base64" => STANDARD
                 .decode(self.secret.as_bytes())
-                .context("secret 必须为 Base64")?,
+                .context(tr!("secret 必须为 Base64", "Secret must be Base64"))?,
             "utf8" => self.secret.as_bytes().to_vec(),
-            _ => anyhow::bail!("不支持的密钥编码"),
+            _ => anyhow::bail!(tr_format!("不支持的密钥编码", "Unsupported key encoding")),
         });
-        ensure!(!key.is_empty(), "secret 不可为空");
+        ensure!(
+            !key.is_empty(),
+            tr!("secret 不可为空", "Secret must not be empty")
+        );
         let key = Arc::new(key);
         let mut engine = Engine::new();
         engine
@@ -240,8 +302,14 @@ impl Execution {
         let started = Instant::now();
         let signal = cancel.clone();
         engine.on_progress(move |_| {
-            (signal.load(Ordering::Relaxed) || started.elapsed() > Duration::from_millis(250))
-                .then(|| Dynamic::from("插件执行超时或已取消"))
+            (signal.load(Ordering::Relaxed) || started.elapsed() > Duration::from_millis(250)).then(
+                || {
+                    Dynamic::from(tr!(
+                        "插件执行超时或已取消",
+                        "Plugin execution timed out or was cancelled"
+                    ))
+                },
+            )
         });
         let md5_key = key.clone();
         engine.register_fn("md5_secret_wrap", move |data: &str| {
@@ -256,13 +324,16 @@ impl Execution {
             "hmac_sha256",
             move |data: &str| -> Result<String, Box<EvalAltResult>> {
                 let mut mac = <Hmac<Sha256> as Mac>::new_from_slice(hmac_key.as_slice())
-                    .map_err(|_| script_error("HMAC 密钥无效"))?;
+                    .map_err(|_| script_error(tr!("HMAC 密钥无效", "Invalid HMAC key")))?;
                 mac.update(data.as_bytes());
                 Ok(hex::encode(mac.finalize().into_bytes()))
             },
         );
         engine.register_fn("aes256_gcm", move |text: &str, aad: &str| {
             encrypt(key.as_slice(), text, aad)
+        });
+        engine.register_fn("ui_text", |zh: &str, en: &str| {
+            crate::i18n::Language::current().text(zh, en).to_owned()
         });
         engine.register_fn("sha256", |text: &str| {
             hex::encode(Sha256::digest(text.as_bytes()))
@@ -280,7 +351,7 @@ impl Execution {
                     .map(|(k, v)| k.len() + v.len())
                     .sum::<usize>()
                     <= 32768,
-            "Metadata 超过插件限制"
+            tr!("Metadata 超过插件限制", "Metadata exceeds plugin limits")
         );
         let mut scope = Scope::new();
         scope
@@ -289,17 +360,30 @@ impl Execution {
             .push("metadata", rhai::serde::to_dynamic(metadata)?);
         let output = engine
             .eval_with_scope::<Dynamic>(&mut scope, &self.plugin.script)
-            .map_err(|e| anyhow::anyhow!("插件执行失败：{e}"))?;
+            .map_err(|e| {
+                anyhow::anyhow!(tr_format!(
+                    "插件执行失败：{e}",
+                    "Plugin execution failed: {e}"
+                ))
+            })?;
         ensure!(
             !cancel.load(Ordering::Relaxed) && started.elapsed() <= Duration::from_millis(250),
-            "插件已取消或超时，未发送请求"
+            tr!(
+                "插件已取消或超时，未发送请求",
+                "Plugin cancelled or timed out; request not sent"
+            )
         );
-        let values: BTreeMap<String, String> =
-            rhai::serde::from_dynamic(&output).context("插件必须返回字符串值的 Metadata 对象")?;
+        let values: BTreeMap<String, String> = rhai::serde::from_dynamic(&output).context(tr!(
+            "插件必须返回字符串值的 Metadata 对象",
+            "Plugins must return a metadata object with string values"
+        ))?;
         ensure!(
             values.len() <= 64
                 && values.iter().map(|(k, v)| k.len() + v.len()).sum::<usize>() <= 32768,
-            "插件输出超过限制（64 个头 / 32 KiB）"
+            tr!(
+                "插件输出超过限制（64 个头 / 32 KiB）",
+                "Plugin output exceeds limits (64 headers / 32 KiB)"
+            )
         );
         crate::rpc::metadata(&serde_json::to_string(&values)?, "")
     }

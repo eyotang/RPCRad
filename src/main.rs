@@ -1,5 +1,7 @@
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 extern crate gpui_kit as gpui;
+#[macro_use]
+mod i18n;
 mod assets;
 mod paths;
 mod plugin;
@@ -11,6 +13,17 @@ use gpui_kit::component::{Theme, ThemeMode};
 use gpui_kit::*;
 
 fn main() {
+    let language =
+        std::env::args().find_map(|arg| arg.strip_prefix("--language=").map(str::to_owned));
+    let language = language.map(|code| match code.as_str() {
+        "zh-CN" => i18n::Language::Chinese,
+        "en" => i18n::Language::English,
+        _ => {
+            eprintln!("Unsupported language: {code}. Use --language=zh-CN or --language=en.");
+            std::process::exit(2);
+        }
+    });
+    language.unwrap_or_default().activate();
     if std::env::args().any(|arg| arg == "--check-update") {
         match updater::check() {
             Ok(Some(release)) => println!("Update available: {}", release.version),
@@ -70,13 +83,6 @@ fn main() {
                 ),
             ]);
             cx.on_action(|_: &ui::Quit, cx| cx.quit());
-            #[cfg(target_os = "macos")]
-            cx.set_menus([Menu::new("RPCRad").items([
-                MenuItem::action("关于 RPCRad…", ui::About),
-                MenuItem::action("检查更新…", ui::CheckUpdates),
-                MenuItem::separator(),
-                MenuItem::action("退出 RPCRad", ui::Quit),
-            ])]);
             let options = WindowOptions {
                 app_id: Some("dev.rpcrad.desktop".into()),
                 window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
@@ -93,16 +99,28 @@ fn main() {
                 ..Default::default()
             };
             match gpui_kit::open_window(options, cx, |window, cx| {
-                cx.new(|cx| ui::Workbench::new(window, cx))
+                cx.new(|cx| ui::Workbench::new(language, window, cx))
             }) {
                 Ok((window, workbench)) => {
                     if ui_smoke {
+                        let checked = window.update(cx, |_, window, cx| {
+                            workbench.update(cx, |this, cx| this.language_smoke_test(window, cx))
+                        });
+                        if let Err(error) = checked.and_then(|result| result) {
+                            eprintln!("{error:#}");
+                            std::process::exit(1);
+                        }
                         let _ = window.update(cx, |_, window, _| {
                             window.on_next_frame(|window, _| {
                                 window.on_next_frame(|_, cx| {
                                     if let Some(path) = std::env::var_os("RPCRAD_UI_SMOKE_MARKER")
-                                        && let Err(error) =
-                                            std::fs::write(path, "native frames rendered")
+                                        && let Err(error) = std::fs::write(
+                                            path,
+                                            format!(
+                                                "native frames rendered: {}",
+                                                i18n::Language::current().label()
+                                            ),
+                                        )
                                     {
                                         eprintln!("{error}");
                                         std::process::exit(1);
@@ -126,7 +144,10 @@ fn main() {
                     cx.activate(true);
                 }
                 Err(error) => {
-                    eprintln!("无法打开 RPCRad: {error}");
+                    eprintln!(
+                        "{}",
+                        tr_format!("无法打开 RPCRad: {error}", "Cannot open RPCRad: {error}")
+                    );
                     if ui_smoke {
                         std::process::exit(1);
                     }
@@ -134,4 +155,14 @@ fn main() {
                 }
             }
         });
+}
+
+fn install_menus(_cx: &mut App) {
+    #[cfg(target_os = "macos")]
+    _cx.set_menus([Menu::new("RPCRad").items([
+        MenuItem::action(tr!("关于 RPCRad…", "About RPCRad…"), ui::About),
+        MenuItem::action(tr!("检查更新…", "Check for updates…"), ui::CheckUpdates),
+        MenuItem::separator(),
+        MenuItem::action(tr!("退出 RPCRad", "Quit RPCRad"), ui::Quit),
+    ])]);
 }

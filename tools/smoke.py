@@ -18,19 +18,26 @@ def run(app, gui, data):
     # An existing file prevents tests from importing the developer's legacy workspace.
     (data/'workspace.json').write_text('{}')
     for arg in ['--smoke-test', '--plugin-smoke-test']:
-        result = subprocess.run([str(app), arg], cwd=data, env=env, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=45)
+        result = subprocess.run([str(app), '--language=en', arg], cwd=data, env=env, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=45)
         print(result.stdout, end='')
         if result.returncode:
             raise RuntimeError(f'{arg}: {result.returncode}\n{result.stderr}')
         if 'PASS:' not in result.stdout:
             raise RuntimeError(f'{arg}: no success marker')
     if gui:
-        marker = data/'rendered.txt'
-        env['RPCRAD_UI_SMOKE_MARKER'] = str(marker)
-        result = subprocess.run([str(app), '--ui-smoke-test'], cwd=data, env=env, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=40)
-        if result.returncode or not marker.exists():
-            raise RuntimeError(f'Native UI failed: {result.returncode}\n{result.stdout}\n{result.stderr}')
-        print('PASS: native UI rendered two frames')
+        for code, label in [('zh-CN', '简体中文'), ('en', 'English'), (None, 'English')]:
+            marker = data/'rendered.txt'
+            marker.unlink(missing_ok=True)
+            env['RPCRAD_UI_SMOKE_MARKER'] = str(marker)
+            command = [str(app), '--ui-smoke-test']
+            if code:
+                command.append(f'--language={code}')
+            result = subprocess.run(command, cwd=data, env=env, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=40)
+            if result.returncode or not marker.exists():
+                raise RuntimeError(f'Native UI failed: {result.returncode}\n{result.stdout}\n{result.stderr}')
+            if marker.read_text(encoding='utf-8') != f'native frames rendered: {label}':
+                raise RuntimeError('Native UI used the wrong language')
+            print(f'PASS: native UI rendered {label}; switching and persistence verified')
 
 def main():
     parser = argparse.ArgumentParser()
